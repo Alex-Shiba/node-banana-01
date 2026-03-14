@@ -124,6 +124,7 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
       return {
         template: "",
         outputText: null,
+        outputParts: null,
         unresolvedVars: [],
       } as PromptConstructorNodeData;
     case "nanoBanana": {

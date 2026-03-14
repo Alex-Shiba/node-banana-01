@@ -259,9 +259,9 @@ export const PromptConstructorEditorModal: React.FC<PromptConstructorEditorModal
                         : "text-neutral-300 hover:bg-neutral-700"
                     }`}
                   >
-                    <div className="font-medium text-blue-400">@{variable.name}</div>
+                    <div className={`font-medium ${variable.variableType === "image" ? "text-emerald-400" : "text-blue-400"}`}>@{variable.name}</div>
                     <div className="text-neutral-500 truncate max-w-[200px]">
-                      {variable.value || "(empty)"}
+                      {variable.variableType === "image" ? "(image)" : variable.value || "(empty)"}
                     </div>
                   </button>
                 ))}

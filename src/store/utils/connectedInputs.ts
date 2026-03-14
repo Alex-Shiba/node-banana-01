@@ -38,6 +38,7 @@ export interface ConnectedInputs {
   audio: string[];
   model3d: string | null;
   text: string | null;
+  namedImages: Record<string, string>; // variableName → base64 image data URL
   dynamicInputs: Record<string, string | string[]>;
   easeCurve: { bezierHandles: [number, number, number, number]; easingPreset: string | null; outputDuration: number } | null;
 }
@@ -131,13 +132,14 @@ export function getConnectedInputsPure(
   dimmedNodeIds?: Set<string>
 ): ConnectedInputs {
   const _visited = visited || new Set<string>();
-  if (_visited.has(nodeId)) return { images: [], videos: [], audio: [], model3d: null, text: null, dynamicInputs: {}, easeCurve: null };
+  if (_visited.has(nodeId)) return { images: [], videos: [], audio: [], model3d: null, text: null, namedImages: {}, dynamicInputs: {}, easeCurve: null };
   _visited.add(nodeId);
   const images: string[] = [];
   const videos: string[] = [];
   const audio: string[] = [];
   let model3d: string | null = null;
   let text: string | null = null;
+  const namedImages: Record<string, string> = {};
   const dynamicInputs: Record<string, string | string[]> = {};
   let easeCurve: ConnectedInputs["easeCurve"] = null;
 
@@ -190,6 +192,7 @@ export function getConnectedInputsPure(
 
         if (edgeType === "image" || (!edgeType && isImageHandle(edge.sourceHandle))) {
           images.push(...routerInputs.images);
+          Object.assign(namedImages, routerInputs.namedImages);
         } else if (edgeType === "text" || (!edgeType && isTextHandle(edge.sourceHandle))) {
           if (routerInputs.text) text = routerInputs.text;
         } else if (edgeType === "video") {
@@ -224,6 +227,7 @@ export function getConnectedInputsPure(
 
         if (edgeType === "image") {
           images.push(...switchInputs.images);
+          Object.assign(namedImages, switchInputs.namedImages);
         } else if (edgeType === "text") {
           if (switchInputs.text) text = switchInputs.text;
         } else if (edgeType === "video") {
@@ -289,6 +293,14 @@ export function getConnectedInputsPure(
         }
       }
 
+      // Track named image variables from imageInput nodes
+      if (type === "image" && sourceNode.type === "imageInput") {
+        const imgData = sourceNode.data as ImageInputNodeData;
+        if (imgData.variableName && value) {
+          namedImages[imgData.variableName] = value;
+        }
+      }
+
       // Route to typed arrays based on source output type
       if (type === "3d") {
         model3d = value;
@@ -323,7 +335,7 @@ export function getConnectedInputsPure(
     }
   }
 
-  return { images, videos, audio, model3d, text, dynamicInputs, easeCurve };
+  return { images, videos, audio, model3d, text, namedImages, dynamicInputs, easeCurve };
 }
 
 /**

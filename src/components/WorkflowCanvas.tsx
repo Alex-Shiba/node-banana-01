@@ -144,7 +144,7 @@ const getNodeHandles = (nodeType: string): { inputs: string[]; outputs: string[]
     case "array":
       return { inputs: ["text"], outputs: ["text"] };
     case "promptConstructor":
-      return { inputs: ["text"], outputs: ["text"] };
+      return { inputs: ["text", "image"], outputs: ["text"] };
     case "nanoBanana":
       return { inputs: ["image", "text"], outputs: ["image"] };
     case "generateVideo":

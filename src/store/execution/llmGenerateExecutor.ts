@@ -5,8 +5,9 @@
  * Used by both executeWorkflow and regenerateNode.
  */
 
-import type { LLMGenerateNodeData } from "@/types";
+import type { LLMGenerateNodeData, PromptPart, PromptConstructorNodeData } from "@/types";
 import { buildLlmHeaders } from "@/store/utils/buildApiHeaders";
+import { resolveImageVars, hasImageVarReferences } from "@/utils/resolveImageVars";
 import type { NodeExecutionContext } from "./types";
 
 export interface LlmGenerateOptions {
@@ -58,6 +59,25 @@ export async function executeLlmGenerate(
     error: null,
   });
 
+  // Check for multimodal parts from PromptConstructor or from direct image variable references
+  let parts: PromptPart[] | undefined;
+  const { getEdges, getNodes } = ctx;
+
+  const upstreamPcNode = getEdges()
+    .filter((e) => e.target === node.id && (e.targetHandle === "text" || e.targetHandle?.startsWith("text")))
+    .map((e) => getNodes().find((n) => n.id === e.source))
+    .find((n) => n?.type === "promptConstructor");
+  if (upstreamPcNode) {
+    const pcData = upstreamPcNode.data as PromptConstructorNodeData;
+    if (pcData.outputParts && pcData.outputParts.length > 0) {
+      parts = pcData.outputParts;
+    }
+  }
+
+  if (!parts && Object.keys(inputs.namedImages).length > 0 && hasImageVarReferences(text, inputs.namedImages)) {
+    parts = resolveImageVars(text, inputs.namedImages);
+  }
+
   const headers = buildLlmHeaders(nodeData.provider, providerSettings);
 
   try {
@@ -67,6 +87,7 @@ export async function executeLlmGenerate(
       body: JSON.stringify({
         prompt: text,
         ...(images.length > 0 && { images }),
+        ...(parts && { parts }),
         provider: nodeData.provider,
         model: nodeData.model,
         temperature: nodeData.temperature,

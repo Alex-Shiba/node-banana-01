@@ -7,9 +7,12 @@
 
 import type {
   NanoBananaNodeData,
+  PromptPart,
+  PromptConstructorNodeData,
 } from "@/types";
 import { calculateGenerationCost } from "@/utils/costCalculator";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
+import { resolveImageVars, hasImageVarReferences } from "@/utils/resolveImageVars";
 import type { NodeExecutionContext } from "./types";
 
 export interface NanoBananaOptions {
@@ -40,7 +43,7 @@ export async function executeNanoBanana(
 
   const { useStoredFallback = false } = options;
 
-  const { images: connectedImages, text: connectedText, dynamicInputs } = getConnectedInputs(node.id);
+  const { images: connectedImages, text: connectedText, namedImages, dynamicInputs } = getConnectedInputs(node.id);
 
   // Get fresh node data from store
   const freshNode = getFreshNode(node.id);
@@ -94,7 +97,27 @@ export async function executeNanoBanana(
   const sanitizedDynamicInputs = { ...dynamicInputs };
   delete sanitizedDynamicInputs.prompt;
 
-  const requestPayload = {
+  // Check for multimodal parts from PromptConstructor or from direct image variable references
+  let parts: PromptPart[] | undefined;
+
+  // First check if upstream PromptConstructor already built outputParts
+  const upstreamPcNode = getEdges()
+    .filter((e) => e.target === node.id && (e.targetHandle === "text" || e.targetHandle?.startsWith("text")))
+    .map((e) => getNodes().find((n) => n.id === e.source))
+    .find((n) => n?.type === "promptConstructor");
+  if (upstreamPcNode) {
+    const pcData = upstreamPcNode.data as PromptConstructorNodeData;
+    if (pcData.outputParts && pcData.outputParts.length > 0) {
+      parts = pcData.outputParts;
+    }
+  }
+
+  // If no upstream parts but we have namedImages and the prompt references them, build parts
+  if (!parts && Object.keys(namedImages).length > 0 && promptText && hasImageVarReferences(promptText, namedImages)) {
+    parts = resolveImageVars(promptText, namedImages);
+  }
+
+  const requestPayload: Record<string, unknown> = {
     images,
     prompt: promptText,
     aspectRatio: nodeData.aspectRatio,
@@ -105,6 +128,7 @@ export async function executeNanoBanana(
     selectedModel: nodeData.selectedModel,
     parameters: nodeData.parameters,
     dynamicInputs: sanitizedDynamicInputs,
+    ...(parts && { parts }),
   };
 
   // Final guard: assert that prompt is a string before sending to API

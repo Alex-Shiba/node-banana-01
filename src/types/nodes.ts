@@ -60,6 +60,7 @@ export interface ImageInputNodeData extends BaseNodeData {
   imageRef?: string; // External image reference for storage optimization
   filename: string | null;
   dimensions: { width: number; height: number } | null;
+  variableName?: string; // Optional variable name for use in PromptConstructor templates (image variable)
 }
 
 /**
@@ -104,6 +105,7 @@ export interface ArrayNodeData extends BaseNodeData {
 export interface PromptConstructorNodeData extends BaseNodeData {
   template: string;
   outputText: string | null;
+  outputParts: PromptPart[] | null; // Multimodal parts with interleaved text and image references
   unresolvedVars: string[];
 }
 
@@ -114,7 +116,15 @@ export interface AvailableVariable {
   name: string;
   value: string;
   nodeId: string;
+  variableType: "text" | "image"; // Whether this variable holds text or image data
 }
+
+/**
+ * A single part of a multimodal prompt (text or image reference)
+ */
+export type PromptPart =
+  | { type: "text"; value: string }
+  | { type: "image"; name: string; value: string }; // value is base64 data URL
 
 /**
  * Image history item for tracking generated images
