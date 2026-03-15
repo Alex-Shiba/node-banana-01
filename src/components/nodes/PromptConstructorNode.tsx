@@ -263,7 +263,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
           {/* Autocomplete dropdown */}
           {showAutocomplete && filteredAutocompleteVars.length > 0 && (
             <div
-              className="absolute z-20 bg-neutral-800 border border-neutral-600 rounded shadow-xl max-h-40 overflow-y-auto"
+              className="nodrag nopan nowheel absolute z-20 bg-neutral-800 border border-neutral-600 rounded shadow-xl max-h-40 overflow-y-auto"
               style={{
                 top: autocompletePosition.top,
                 left: autocompletePosition.left,
@@ -274,6 +274,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
                   key={variable.nodeId}
                   onMouseDown={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     handleAutocompleteSelect(variable.name);
                   }}
                   className={`w-full px-3 py-2 text-left text-[11px] flex flex-col gap-0.5 transition-colors ${
