@@ -421,12 +421,17 @@ const IMAGE_SOURCE_NODE_TYPES = new Set<string>([
   "imageInput", "annotation", "nanoBanana", "glbViewer", "videoFrameGrab",
 ]);
 
+const TEXT_SOURCE_NODE_TYPES = new Set<string>([
+  "prompt", "promptConstructor", "llmGenerate", "array",
+]);
+
 /**
- * After edges are removed, clear inputImages on any target node that no longer
- * has an image-source edge. Prevents stale images from being sent to the API
- * when useStoredFallback picks up old node data.
+ * After edges are removed, clear stale cached input data on target nodes.
+ * Clears inputImages when no image-source edges remain, inputPrompt when no
+ * text-source edges remain, and outputParts on PromptConstructor nodes when
+ * their image inputs are removed.
  */
-function clearStaleInputImages(
+function clearStaleInputData(
   removedEdges: WorkflowEdge[],
   get: () => WorkflowStore
 ): void {
@@ -435,14 +440,42 @@ function clearStaleInputImages(
   const targetIds = new Set(removedEdges.map((e) => e.target));
   for (const targetId of targetIds) {
     const node = nodes.find((n) => n.id === targetId);
-    if (!node || !("inputImages" in (node.data as Record<string, unknown>))) continue;
-    const hasRemainingImageSource = edges.some((e) => {
-      if (e.target !== targetId) return false;
-      const src = nodes.find((n) => n.id === e.source);
-      return src ? IMAGE_SOURCE_NODE_TYPES.has(src.type ?? "") : false;
-    });
-    if (!hasRemainingImageSource) {
-      updateNodeData(targetId, { inputImages: [] });
+    if (!node) continue;
+    const nodeData = node.data as Record<string, unknown>;
+
+    // Clear inputImages if no image-source edges remain
+    if ("inputImages" in nodeData) {
+      const hasRemainingImageSource = edges.some((e) => {
+        if (e.target !== targetId) return false;
+        const src = nodes.find((n) => n.id === e.source);
+        return src ? IMAGE_SOURCE_NODE_TYPES.has(src.type ?? "") : false;
+      });
+      if (!hasRemainingImageSource) {
+        updateNodeData(targetId, { inputImages: [] });
+      }
+    }
+
+    // Clear inputPrompt if no text-source edges remain
+    if ("inputPrompt" in nodeData) {
+      const hasRemainingTextSource = edges.some((e) => {
+        if (e.target !== targetId) return false;
+        const src = nodes.find((n) => n.id === e.source);
+        return src ? TEXT_SOURCE_NODE_TYPES.has(src.type ?? "") : false;
+      });
+      if (!hasRemainingTextSource) {
+        updateNodeData(targetId, { inputPrompt: null });
+      }
+    }
+
+    // Clear outputParts on PromptConstructor when image inputs are removed
+    if (node.type === "promptConstructor" && "outputParts" in nodeData) {
+      const hasRemainingImageInput = edges.some((e) => {
+        if (e.target !== targetId) return false;
+        return e.targetHandle === "image";
+      });
+      if (!hasRemainingImageInput) {
+        updateNodeData(targetId, { outputParts: null });
+      }
     }
   }
 }
@@ -636,7 +669,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }));
 
     if (hasRemoveChange) {
-      clearStaleInputImages(removedEdges, get);
+      clearStaleInputData(removedEdges, get);
       get().incrementManualChangeCount();
     }
 
@@ -686,7 +719,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       edges: state.edges.filter((edge) => edge.id !== edgeId),
       hasUnsavedChanges: true,
     }));
-    if (removedEdge) clearStaleInputImages([removedEdge], get);
+    if (removedEdge) clearStaleInputData([removedEdge], get);
     get().incrementManualChangeCount();
   },
 

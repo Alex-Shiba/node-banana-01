@@ -9,6 +9,7 @@ import type {
   NanoBananaNodeData,
   PromptPart,
   PromptConstructorNodeData,
+  ImageInputNodeData,
 } from "@/types";
 import { calculateGenerationCost } from "@/utils/costCalculator";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
@@ -110,15 +111,38 @@ export async function executeNanoBanana(
     parts = resolveImageVars(promptText, namedImages);
   }
 
-  // Fallback: check upstream PromptConstructor's outputParts if we couldn't resolve locally
+  // Fallback: if an upstream PromptConstructor has image variable references,
+  // re-resolve parts from fresh imageInput data instead of trusting cached
+  // outputParts (which may contain stale embedded images from a previous run).
   if (!parts) {
-    const upstreamPcNode = getEdges()
+    const allEdges = getEdges();
+    const allNodes = getNodes();
+    const upstreamPcNode = allEdges
       .filter((e) => e.target === node.id && (e.targetHandle === "text" || e.targetHandle?.startsWith("text")))
-      .map((e) => getNodes().find((n) => n.id === e.source))
+      .map((e) => allNodes.find((n) => n.id === e.source))
       .find((n) => n?.type === "promptConstructor");
     if (upstreamPcNode) {
       const pcData = upstreamPcNode.data as PromptConstructorNodeData;
-      if (pcData.outputParts && pcData.outputParts.length > 0) {
+      // Walk up to the PromptConstructor's image inputs for fresh data
+      const pcImageSources = allEdges
+        .filter((e) => e.target === upstreamPcNode.id && e.targetHandle === "image")
+        .map((e) => allNodes.find((n) => n.id === e.source))
+        .filter((n): n is typeof allNodes[number] => n !== undefined);
+      const freshNamedImages: Record<string, string> = {};
+      for (const src of pcImageSources) {
+        if (src.type === "imageInput") {
+          const imgData = src.data as ImageInputNodeData;
+          if (imgData.variableName && imgData.image) {
+            freshNamedImages[imgData.variableName] = imgData.image;
+          }
+        }
+      }
+      // Re-resolve from fresh images if possible
+      const resolvedText = pcData.outputText ?? pcData.template ?? promptText;
+      if (Object.keys(freshNamedImages).length > 0 && resolvedText && hasImageVarReferences(resolvedText, freshNamedImages)) {
+        parts = resolveImageVars(resolvedText, freshNamedImages);
+      } else if (pcData.outputParts && pcData.outputParts.length > 0) {
+        // Last resort: use cached outputParts (no image inputs to re-resolve from)
         parts = pcData.outputParts;
       }
     }
