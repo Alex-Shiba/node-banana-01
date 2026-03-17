@@ -12,13 +12,18 @@ interface SplitGridSettingsModalProps {
 }
 
 const LAYOUT_OPTIONS = [
+  { rows: 1, cols: 2 },
+  { rows: 1, cols: 3 },
+  { rows: 1, cols: 4 },
+  { rows: 2, cols: 1 },
   { rows: 2, cols: 2 },
-  { rows: 1, cols: 5 },
   { rows: 2, cols: 3 },
   { rows: 3, cols: 2 },
   { rows: 2, cols: 4 },
   { rows: 3, cols: 3 },
-  { rows: 2, cols: 5 },
+  { rows: 3, cols: 4 },
+  { rows: 4, cols: 3 },
+  { rows: 4, cols: 4 },
 ] as const;
 
 const BASE_ASPECT_RATIOS: AspectRatio[] = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
@@ -32,8 +37,7 @@ const MODELS: { value: ModelType; label: string }[] = [
 ];
 
 const findLayoutIndex = (rows: number, cols: number): number => {
-  const idx = LAYOUT_OPTIONS.findIndex(l => l.rows === rows && l.cols === cols);
-  return idx >= 0 ? idx : 2; // default to 2x3
+  return LAYOUT_OPTIONS.findIndex(l => l.rows === rows && l.cols === cols);
 };
 
 export function SplitGridSettingsModal({
@@ -43,9 +47,12 @@ export function SplitGridSettingsModal({
 }: SplitGridSettingsModalProps) {
   const { updateNodeData, addNode, onConnect, addEdgeWithType, getNodeById } = useWorkflowStore();
 
+  const initialPresetIdx = findLayoutIndex(nodeData.gridRows, nodeData.gridCols);
   const [selectedLayoutIndex, setSelectedLayoutIndex] = useState(
-    findLayoutIndex(nodeData.gridRows, nodeData.gridCols)
+    initialPresetIdx >= 0 ? initialPresetIdx : -1
   );
+  const [customRows, setCustomRows] = useState(nodeData.gridRows);
+  const [customCols, setCustomCols] = useState(nodeData.gridCols);
   const [defaultPrompt, setDefaultPrompt] = useState(nodeData.defaultPrompt);
   const [aspectRatio, setAspectRatio] = useState(nodeData.generateSettings.aspectRatio);
   const [resolution, setResolution] = useState(nodeData.generateSettings.resolution);
@@ -53,7 +60,8 @@ export function SplitGridSettingsModal({
   const [useGoogleSearch, setUseGoogleSearch] = useState(nodeData.generateSettings.useGoogleSearch);
   const [useImageSearch, setUseImageSearch] = useState(nodeData.generateSettings.useImageSearch);
 
-  const { rows, cols } = LAYOUT_OPTIONS[selectedLayoutIndex];
+  const rows = selectedLayoutIndex >= 0 ? LAYOUT_OPTIONS[selectedLayoutIndex].rows : customRows;
+  const cols = selectedLayoutIndex >= 0 ? LAYOUT_OPTIONS[selectedLayoutIndex].cols : customCols;
   const targetCount = rows * cols;
   const isNanoBananaPro = model === "nano-banana-pro" || model === "nano-banana-2";
   const aspectRatios = model === "nano-banana-2" ? EXTENDED_ASPECT_RATIOS : BASE_ASPECT_RATIOS;
@@ -200,15 +208,19 @@ export function SplitGridSettingsModal({
             <label className="block text-sm text-neutral-400 mb-2">
               Grid Layout
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {LAYOUT_OPTIONS.map((layout, index) => {
                 const count = layout.rows * layout.cols;
                 const isSelected = selectedLayoutIndex === index;
                 return (
                   <button
                     key={`${layout.rows}x${layout.cols}`}
-                    onClick={() => setSelectedLayoutIndex(index)}
-                    className={`flex-1 p-2 rounded border transition-colors ${
+                    onClick={() => {
+                      setSelectedLayoutIndex(index);
+                      setCustomRows(layout.rows);
+                      setCustomCols(layout.cols);
+                    }}
+                    className={`w-[68px] p-2 rounded border transition-colors ${
                       isSelected
                         ? "border-blue-500 bg-blue-500/20"
                         : "border-neutral-600 hover:border-neutral-500"
@@ -231,14 +243,45 @@ export function SplitGridSettingsModal({
                       ))}
                     </div>
                     <div className="text-xs text-neutral-300 mt-1 text-center">{layout.rows}x{layout.cols}</div>
-                    <div className="text-[10px] text-neutral-500 text-center">{count}</div>
                   </button>
                 );
               })}
             </div>
-            <p className="text-xs text-neutral-500 mt-2">
-              Grid will be split into {rows}x{cols} = {targetCount} images
-            </p>
+
+            {/* Custom rows/cols input */}
+            <div className="flex items-center gap-3 mt-3">
+              <span className="text-xs text-neutral-500">Custom:</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={customRows}
+                  onChange={(e) => {
+                    const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 1));
+                    setCustomRows(v);
+                    setSelectedLayoutIndex(findLayoutIndex(v, customCols));
+                  }}
+                  className="w-14 px-2 py-1 bg-neutral-900 border border-neutral-600 rounded text-neutral-100 text-sm text-center focus:outline-none focus:border-neutral-500"
+                />
+                <span className="text-neutral-500 text-sm">x</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={customCols}
+                  onChange={(e) => {
+                    const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 1));
+                    setCustomCols(v);
+                    setSelectedLayoutIndex(findLayoutIndex(customRows, v));
+                  }}
+                  className="w-14 px-2 py-1 bg-neutral-900 border border-neutral-600 rounded text-neutral-100 text-sm text-center focus:outline-none focus:border-neutral-500"
+                />
+              </div>
+              <span className="text-xs text-neutral-500">
+                = {targetCount} images
+              </span>
+            </div>
           </div>
 
           {/* Default prompt */}

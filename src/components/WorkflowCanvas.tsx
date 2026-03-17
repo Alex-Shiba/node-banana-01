@@ -1980,7 +1980,7 @@ export function WorkflowCanvas() {
             ? false
             : canvasNavigationSettings.panMode === "always"
             ? false
-            : isMacOS && !isModalOpen
+            : !isModalOpen
         }
         selectionKeyCode={
           isModalOpen ? null
@@ -1995,7 +1995,7 @@ export function WorkflowCanvas() {
             ? true
             : canvasNavigationSettings.panMode === "middleMouse"
             ? [2]
-            : !isMacOS
+            : false
         }
         selectNodesOnDrag={false}
         nodeDragThreshold={5}

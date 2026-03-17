@@ -97,24 +97,28 @@ export async function executeNanoBanana(
   const sanitizedDynamicInputs = { ...dynamicInputs };
   delete sanitizedDynamicInputs.prompt;
 
-  // Check for multimodal parts from PromptConstructor or from direct image variable references
+  // Check for multimodal parts from image variable references.
+  // Always re-resolve from fresh namedImages rather than trusting cached
+  // outputParts on the upstream PromptConstructor, which may be stale when
+  // only this node is re-run (e.g. via "Run node" button).
   let parts: PromptPart[] | undefined;
 
-  // First check if upstream PromptConstructor already built outputParts
-  const upstreamPcNode = getEdges()
-    .filter((e) => e.target === node.id && (e.targetHandle === "text" || e.targetHandle?.startsWith("text")))
-    .map((e) => getNodes().find((n) => n.id === e.source))
-    .find((n) => n?.type === "promptConstructor");
-  if (upstreamPcNode) {
-    const pcData = upstreamPcNode.data as PromptConstructorNodeData;
-    if (pcData.outputParts && pcData.outputParts.length > 0) {
-      parts = pcData.outputParts;
-    }
+  if (Object.keys(namedImages).length > 0 && promptText && hasImageVarReferences(promptText, namedImages)) {
+    parts = resolveImageVars(promptText, namedImages);
   }
 
-  // If no upstream parts but we have namedImages and the prompt references them, build parts
-  if (!parts && Object.keys(namedImages).length > 0 && promptText && hasImageVarReferences(promptText, namedImages)) {
-    parts = resolveImageVars(promptText, namedImages);
+  // Fallback: check upstream PromptConstructor's outputParts if we couldn't resolve locally
+  if (!parts) {
+    const upstreamPcNode = getEdges()
+      .filter((e) => e.target === node.id && (e.targetHandle === "text" || e.targetHandle?.startsWith("text")))
+      .map((e) => getNodes().find((n) => n.id === e.source))
+      .find((n) => n?.type === "promptConstructor");
+    if (upstreamPcNode) {
+      const pcData = upstreamPcNode.data as PromptConstructorNodeData;
+      if (pcData.outputParts && pcData.outputParts.length > 0) {
+        parts = pcData.outputParts;
+      }
+    }
   }
 
   const requestPayload: Record<string, unknown> = {
