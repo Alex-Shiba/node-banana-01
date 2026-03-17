@@ -1995,7 +1995,7 @@ export function WorkflowCanvas() {
             ? true
             : canvasNavigationSettings.panMode === "middleMouse"
             ? [2]
-            : false
+            : [1, 2]
         }
         selectNodesOnDrag={false}
         nodeDragThreshold={5}

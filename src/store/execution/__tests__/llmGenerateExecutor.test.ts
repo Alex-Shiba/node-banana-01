@@ -231,6 +231,9 @@ describe("executeLlmGenerate", () => {
         dynamicInputs: {},
         easeCurve: null,
       }),
+      getEdges: vi.fn().mockReturnValue([
+        { id: "e1", source: "prompt-1", target: "llm-1", targetHandle: "text" },
+      ]),
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,

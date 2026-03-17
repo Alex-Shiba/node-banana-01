@@ -312,6 +312,10 @@ describe("executeNanoBanana", () => {
         dynamicInputs: {},
         easeCurve: null,
       }),
+      // Edges exist (upstream just not re-run) — fallback should be used
+      getEdges: vi.fn().mockReturnValue([
+        { id: "e1", source: "prompt-1", target: "gen-1", targetHandle: "text" },
+      ]),
     });
     // Enable regenerate mode: fallback to stored inputs
     mockFetch.mockResolvedValueOnce({

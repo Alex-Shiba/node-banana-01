@@ -23,6 +23,8 @@ export async function executeLlmGenerate(
     node,
     getConnectedInputs,
     updateNodeData,
+    getEdges,
+    getNodes,
     signal,
     providerSettings,
   } = ctx;
@@ -37,8 +39,9 @@ export async function executeLlmGenerate(
   let text: string | null;
 
   if (useStoredFallback) {
-    images = inputs.images.length > 0 ? inputs.images : nodeData.inputImages;
-    text = inputs.text ?? nodeData.inputPrompt;
+    const hasIncomingEdges = getEdges().some((e) => e.target === node.id);
+    images = inputs.images.length > 0 ? inputs.images : (hasIncomingEdges ? nodeData.inputImages : []);
+    text = inputs.text ?? (hasIncomingEdges ? nodeData.inputPrompt : null);
   } else {
     images = inputs.images;
     text = inputs.text ?? nodeData.inputPrompt;
@@ -64,7 +67,6 @@ export async function executeLlmGenerate(
   // outputParts on the upstream PromptConstructor, which may be stale when
   // only this node is re-run.
   let parts: PromptPart[] | undefined;
-  const { getEdges, getNodes } = ctx;
 
   if (Object.keys(inputs.namedImages).length > 0 && hasImageVarReferences(text, inputs.namedImages)) {
     parts = resolveImageVars(text, inputs.namedImages);

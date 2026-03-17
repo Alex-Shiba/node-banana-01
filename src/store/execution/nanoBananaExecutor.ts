@@ -54,8 +54,11 @@ export async function executeNanoBanana(
   let promptText: string | null;
 
   if (useStoredFallback) {
-    images = connectedImages.length > 0 ? connectedImages : nodeData.inputImages;
-    promptText = connectedText ?? nodeData.inputPrompt;
+    // Only fall back to stored values if the node still has incoming edges.
+    // If all edges are disconnected, stored data is stale and should not be used.
+    const hasIncomingEdges = getEdges().some((e) => e.target === node.id);
+    images = connectedImages.length > 0 ? connectedImages : (hasIncomingEdges ? nodeData.inputImages : []);
+    promptText = connectedText ?? (hasIncomingEdges ? nodeData.inputPrompt : null);
   } else {
     images = connectedImages;
     // For dynamic inputs, check if we have at least a prompt

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { SplitGridNodeData, AspectRatio, Resolution, ModelType } from "@/types";
@@ -25,6 +25,50 @@ const LAYOUT_OPTIONS = [
   { rows: 4, cols: 3 },
   { rows: 4, cols: 4 },
 ] as const;
+
+// Cell aspect ratio options for splitting
+const CELL_ASPECT_RATIOS = [
+  { label: "Auto", value: 0 },
+  { label: "1:1", value: 1 },
+  { label: "16:9", value: 16 / 9 },
+  { label: "9:16", value: 9 / 16 },
+  { label: "4:3", value: 4 / 3 },
+  { label: "3:4", value: 3 / 4 },
+  { label: "3:2", value: 3 / 2 },
+  { label: "2:3", value: 2 / 3 },
+  { label: "21:9", value: 21 / 9 },
+];
+
+/**
+ * Given a source image aspect ratio and desired cell aspect ratio,
+ * find the best rows x cols that produce cells closest to the target.
+ */
+function findBestGrid(
+  sourceWidth: number,
+  sourceHeight: number,
+  cellAR: number,
+  maxDim: number = 10
+): { rows: number; cols: number } {
+  const sourceAR = sourceWidth / sourceHeight;
+  let bestRows = 1;
+  let bestCols = 1;
+  let bestError = Infinity;
+
+  for (let r = 1; r <= maxDim; r++) {
+    for (let c = 1; c <= maxDim; c++) {
+      if (r === 1 && c === 1) continue;
+      const actualCellAR = (sourceAR * r) / c;
+      const error = Math.abs(actualCellAR / cellAR - 1);
+      if (error < bestError) {
+        bestError = error;
+        bestRows = r;
+        bestCols = c;
+      }
+    }
+  }
+
+  return { rows: bestRows, cols: bestCols };
+}
 
 const BASE_ASPECT_RATIOS: AspectRatio[] = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
 const EXTENDED_ASPECT_RATIOS: AspectRatio[] = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
@@ -53,7 +97,27 @@ export function SplitGridSettingsModal({
   );
   const [customRows, setCustomRows] = useState(nodeData.gridRows);
   const [customCols, setCustomCols] = useState(nodeData.gridCols);
+  const [cellAspectRatio, setCellAspectRatio] = useState(0); // 0 = auto
+  const [sourceDims, setSourceDims] = useState<{ width: number; height: number } | null>(null);
   const [defaultPrompt, setDefaultPrompt] = useState(nodeData.defaultPrompt);
+
+  // Load source image dimensions
+  useEffect(() => {
+    if (!nodeData.sourceImage) return;
+    const img = new Image();
+    img.onload = () => setSourceDims({ width: img.width, height: img.height });
+    img.src = nodeData.sourceImage;
+  }, [nodeData.sourceImage]);
+
+  // Auto-calculate grid when cell aspect ratio changes
+  const handleCellAspectRatioChange = useCallback((arValue: number) => {
+    setCellAspectRatio(arValue);
+    if (arValue === 0 || !sourceDims) return;
+    const best = findBestGrid(sourceDims.width, sourceDims.height, arValue);
+    setCustomRows(best.rows);
+    setCustomCols(best.cols);
+    setSelectedLayoutIndex(findLayoutIndex(best.rows, best.cols));
+  }, [sourceDims]);
   const [aspectRatio, setAspectRatio] = useState(nodeData.generateSettings.aspectRatio);
   const [resolution, setResolution] = useState(nodeData.generateSettings.resolution);
   const [model, setModel] = useState(nodeData.generateSettings.model);
@@ -248,6 +312,29 @@ export function SplitGridSettingsModal({
               })}
             </div>
 
+            {/* Cell aspect ratio selector */}
+            <div className="flex items-center gap-3 mt-3">
+              <span className="text-xs text-neutral-500">Cell ratio:</span>
+              <div className="flex gap-1.5">
+                {CELL_ASPECT_RATIOS.map((ar) => (
+                  <button
+                    key={ar.label}
+                    onClick={() => handleCellAspectRatioChange(ar.value)}
+                    className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                      cellAspectRatio === ar.value
+                        ? "border-blue-500 bg-blue-500/20 text-blue-300"
+                        : "border-neutral-600 text-neutral-400 hover:border-neutral-500"
+                    }`}
+                  >
+                    {ar.label}
+                  </button>
+                ))}
+              </div>
+              {cellAspectRatio !== 0 && !sourceDims && (
+                <span className="text-[10px] text-amber-400">Connect image for auto-grid</span>
+              )}
+            </div>
+
             {/* Custom rows/cols input */}
             <div className="flex items-center gap-3 mt-3">
               <span className="text-xs text-neutral-500">Custom:</span>
@@ -280,6 +367,11 @@ export function SplitGridSettingsModal({
               </div>
               <span className="text-xs text-neutral-500">
                 = {targetCount} images
+                {sourceDims && (
+                  <span className="ml-2 text-neutral-600">
+                    (cell: {Math.round(sourceDims.width / cols)}x{Math.round(sourceDims.height / rows)}px)
+                  </span>
+                )}
               </span>
             </div>
           </div>
