@@ -137,13 +137,10 @@ export async function executeNanoBanana(
           }
         }
       }
-      // Re-resolve from fresh images if possible
+      // Re-resolve from fresh images if possible; never use cached outputParts
       const resolvedText = pcData.outputText ?? pcData.template ?? promptText;
       if (Object.keys(freshNamedImages).length > 0 && resolvedText && hasImageVarReferences(resolvedText, freshNamedImages)) {
         parts = resolveImageVars(resolvedText, freshNamedImages);
-      } else if (pcData.outputParts && pcData.outputParts.length > 0) {
-        // Last resort: use cached outputParts (no image inputs to re-resolve from)
-        parts = pcData.outputParts;
       }
     }
   }

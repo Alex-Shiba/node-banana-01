@@ -100,8 +100,6 @@ export async function executeLlmGenerate(
       const resolvedText = pcData.outputText ?? pcData.template ?? text;
       if (Object.keys(freshNamedImages).length > 0 && resolvedText && hasImageVarReferences(resolvedText, freshNamedImages)) {
         parts = resolveImageVars(resolvedText, freshNamedImages);
-      } else if (pcData.outputParts && pcData.outputParts.length > 0) {
-        parts = pcData.outputParts;
       }
     }
   }
