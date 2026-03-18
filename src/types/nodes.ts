@@ -45,7 +45,8 @@ export type NodeType =
   | "switch"
   | "conditionalSwitch"
   | "generate3d"
-  | "glbViewer";
+  | "glbViewer"
+  | "inpaint";
 
 /**
  * Node execution status
@@ -449,6 +450,27 @@ export interface GLBViewerNodeData extends BaseNodeData {
 }
 
 /**
+ * Inpaint node - masked image regeneration
+ */
+export type InpaintProvider = "gemini" | "wavespeed";
+
+export interface InpaintNodeData extends BaseNodeData {
+  inputImage: string | null;        // Source image (from connection or stored)
+  inputImageRef?: string;
+  maskImage: string | null;         // Black/white mask (white = area to regenerate)
+  inputPrompt: string | null;       // What to generate in the masked area
+  outputImage: string | null;       // Result image
+  outputImageRef?: string;
+  inpaintProvider: InpaintProvider;  // Which provider to use
+  selectedModel?: SelectedModel;    // WaveSpeed model selection
+  maskBrushSize: number;            // Last used brush size
+  status: NodeStatus;
+  error: string | null;
+  imageHistory: CarouselImageItem[];
+  selectedHistoryIndex: number;
+}
+
+/**
  * Union of all node data types
  */
 export type WorkflowNodeData =
@@ -474,7 +496,8 @@ export type WorkflowNodeData =
   | RouterNodeData
   | SwitchNodeData
   | ConditionalSwitchNodeData
-  | GLBViewerNodeData;
+  | GLBViewerNodeData
+  | InpaintNodeData;
 
 /**
  * Workflow node with typed data (extended with optional groupId)

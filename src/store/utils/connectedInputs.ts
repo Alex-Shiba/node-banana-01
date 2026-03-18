@@ -26,6 +26,7 @@ import {
   GLBViewerNodeData,
   SwitchNodeData,
   ConditionalSwitchNodeData,
+  InpaintNodeData,
   MatchMode,
 } from "@/types";
 
@@ -116,6 +117,8 @@ function getSourceOutput(
     return { type: "image", value: (sourceNode.data as VideoFrameGrabNodeData).outputImage };
   } else if (sourceNode.type === "glbViewer") {
     return { type: "image", value: (sourceNode.data as GLBViewerNodeData).capturedImage };
+  } else if (sourceNode.type === "inpaint") {
+    return { type: "image", value: (sourceNode.data as InpaintNodeData).outputImage };
   }
   return { type: "image", value: null };
 }

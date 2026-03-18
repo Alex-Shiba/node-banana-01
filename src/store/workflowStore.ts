@@ -418,7 +418,7 @@ export { GROUP_COLORS } from "./utils/nodeDefaults";
 
 /** Node types whose output carries image data */
 const IMAGE_SOURCE_NODE_TYPES = new Set<string>([
-  "imageInput", "annotation", "nanoBanana", "glbViewer", "videoFrameGrab",
+  "imageInput", "annotation", "nanoBanana", "glbViewer", "videoFrameGrab", "inpaint",
 ]);
 
 const TEXT_SOURCE_NODE_TYPES = new Set<string>([
