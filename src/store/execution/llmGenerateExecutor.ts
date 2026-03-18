@@ -5,7 +5,7 @@
  * Used by both executeWorkflow and regenerateNode.
  */
 
-import type { LLMGenerateNodeData, PromptPart, PromptConstructorNodeData, ImageInputNodeData } from "@/types";
+import type { LLMGenerateNodeData, PromptPart, PromptConstructorNodeData } from "@/types";
 import { buildLlmHeaders } from "@/store/utils/buildApiHeaders";
 import { resolveImageVars, hasImageVarReferences } from "@/utils/resolveImageVars";
 import type { NodeExecutionContext } from "./types";
@@ -70,40 +70,18 @@ export async function executeLlmGenerate(
     parts = resolveImageVars(text, inputs.namedImages);
   }
 
-  // 2. Check upstream PromptConstructor for multimodal parts
+  // 2. Check upstream PromptConstructor for multimodal parts.
+  //    outputParts are always fresh: during full workflow the PC executes first,
+  //    and during regenerateNode the PC is re-executed before this node.
   if (!parts) {
-    const allEdges = getEdges();
-    const allNodes = getNodes();
-    const upstreamPcNode = allEdges
+    const upstreamPcNode = getEdges()
       .filter((e) => e.target === node.id && (e.targetHandle === "text" || e.targetHandle?.startsWith("text")))
-      .map((e) => allNodes.find((n) => n.id === e.source))
+      .map((e) => getNodes().find((n) => n.id === e.source))
       .find((n) => n?.type === "promptConstructor");
     if (upstreamPcNode) {
       const pcData = upstreamPcNode.data as PromptConstructorNodeData;
-      if (useStoredFallback) {
-        // Single-node regeneration: re-resolve from fresh imageInput data
-        const pcImageSources = allEdges
-          .filter((e) => e.target === upstreamPcNode.id && e.targetHandle === "image")
-          .map((e) => allNodes.find((n) => n.id === e.source))
-          .filter((n): n is typeof allNodes[number] => n !== undefined);
-        const freshNamedImages: Record<string, string> = {};
-        for (const src of pcImageSources) {
-          if (src.type === "imageInput") {
-            const imgData = src.data as ImageInputNodeData;
-            if (imgData.variableName && imgData.image) {
-              freshNamedImages[imgData.variableName] = imgData.image;
-            }
-          }
-        }
-        const resolvedText = pcData.outputText ?? pcData.template ?? text;
-        if (Object.keys(freshNamedImages).length > 0 && resolvedText && hasImageVarReferences(resolvedText, freshNamedImages)) {
-          parts = resolveImageVars(resolvedText, freshNamedImages);
-        }
-      } else {
-        // Full workflow execution: PC just executed, its outputParts are fresh
-        if (pcData.outputParts && pcData.outputParts.length > 0) {
-          parts = pcData.outputParts;
-        }
+      if (pcData.outputParts && pcData.outputParts.length > 0) {
+        parts = pcData.outputParts;
       }
     }
   }

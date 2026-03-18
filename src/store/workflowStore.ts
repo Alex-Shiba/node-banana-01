@@ -1308,6 +1308,24 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     });
 
     try {
+      // Re-execute lightweight upstream nodes (prompt, promptConstructor) so their
+      // outputs are fresh. This ensures multimodal parts, resolved text, etc. are
+      // up-to-date without needing complex re-resolution logic in each executor.
+      const { edges: regenEdges, nodes: regenNodes } = get();
+      const upstreamEdges = regenEdges.filter((e) => e.target === nodeId);
+      for (const edge of upstreamEdges) {
+        const srcNode = regenNodes.find((n) => n.id === edge.source);
+        if (!srcNode) continue;
+        if (srcNode.type === "prompt" || srcNode.type === "promptConstructor") {
+          const srcCtx = get()._buildExecutionContext(srcNode);
+          if (srcNode.type === "prompt") {
+            await executePrompt(srcCtx);
+          } else {
+            await executePromptConstructor(srcCtx);
+          }
+        }
+      }
+
       const executionCtx = get()._buildExecutionContext(node);
 
       const regenOptions = { useStoredFallback: true };
