@@ -102,18 +102,14 @@ export async function executeNanoBanana(
   delete sanitizedDynamicInputs.prompt;
 
   // Check for multimodal parts from image variable references.
-  // Always re-resolve from fresh namedImages rather than trusting cached
-  // outputParts on the upstream PromptConstructor, which may be stale when
-  // only this node is re-run (e.g. via "Run node" button).
   let parts: PromptPart[] | undefined;
 
+  // 1. Try direct namedImages (imageInput connected directly to this node)
   if (Object.keys(namedImages).length > 0 && promptText && hasImageVarReferences(promptText, namedImages)) {
     parts = resolveImageVars(promptText, namedImages);
   }
 
-  // Fallback: if an upstream PromptConstructor has image variable references,
-  // re-resolve parts from fresh imageInput data instead of trusting cached
-  // outputParts (which may contain stale embedded images from a previous run).
+  // 2. Check upstream PromptConstructor for multimodal parts
   if (!parts) {
     const allEdges = getEdges();
     const allNodes = getNodes();
@@ -123,24 +119,31 @@ export async function executeNanoBanana(
       .find((n) => n?.type === "promptConstructor");
     if (upstreamPcNode) {
       const pcData = upstreamPcNode.data as PromptConstructorNodeData;
-      // Walk up to the PromptConstructor's image inputs for fresh data
-      const pcImageSources = allEdges
-        .filter((e) => e.target === upstreamPcNode.id && e.targetHandle === "image")
-        .map((e) => allNodes.find((n) => n.id === e.source))
-        .filter((n): n is typeof allNodes[number] => n !== undefined);
-      const freshNamedImages: Record<string, string> = {};
-      for (const src of pcImageSources) {
-        if (src.type === "imageInput") {
-          const imgData = src.data as ImageInputNodeData;
-          if (imgData.variableName && imgData.image) {
-            freshNamedImages[imgData.variableName] = imgData.image;
+      if (useStoredFallback) {
+        // Single-node regeneration: PC hasn't re-executed, so re-resolve
+        // from fresh imageInput data to avoid stale embedded images.
+        const pcImageSources = allEdges
+          .filter((e) => e.target === upstreamPcNode.id && e.targetHandle === "image")
+          .map((e) => allNodes.find((n) => n.id === e.source))
+          .filter((n): n is typeof allNodes[number] => n !== undefined);
+        const freshNamedImages: Record<string, string> = {};
+        for (const src of pcImageSources) {
+          if (src.type === "imageInput") {
+            const imgData = src.data as ImageInputNodeData;
+            if (imgData.variableName && imgData.image) {
+              freshNamedImages[imgData.variableName] = imgData.image;
+            }
           }
         }
-      }
-      // Re-resolve from fresh images if possible; never use cached outputParts
-      const resolvedText = pcData.outputText ?? pcData.template ?? promptText;
-      if (Object.keys(freshNamedImages).length > 0 && resolvedText && hasImageVarReferences(resolvedText, freshNamedImages)) {
-        parts = resolveImageVars(resolvedText, freshNamedImages);
+        const resolvedText = pcData.outputText ?? pcData.template ?? promptText;
+        if (Object.keys(freshNamedImages).length > 0 && resolvedText && hasImageVarReferences(resolvedText, freshNamedImages)) {
+          parts = resolveImageVars(resolvedText, freshNamedImages);
+        }
+      } else {
+        // Full workflow execution: PC just executed, its outputParts are fresh
+        if (pcData.outputParts && pcData.outputParts.length > 0) {
+          parts = pcData.outputParts;
+        }
       }
     }
   }

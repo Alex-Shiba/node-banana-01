@@ -63,18 +63,14 @@ export async function executeLlmGenerate(
   });
 
   // Check for multimodal parts from image variable references.
-  // Always re-resolve from fresh namedImages rather than trusting cached
-  // outputParts on the upstream PromptConstructor, which may be stale when
-  // only this node is re-run.
   let parts: PromptPart[] | undefined;
 
+  // 1. Try direct namedImages (imageInput connected directly to this node)
   if (Object.keys(inputs.namedImages).length > 0 && hasImageVarReferences(text, inputs.namedImages)) {
     parts = resolveImageVars(text, inputs.namedImages);
   }
 
-  // Fallback: if an upstream PromptConstructor has image variable references,
-  // re-resolve parts from fresh imageInput data instead of trusting cached
-  // outputParts (which may contain stale embedded images from a previous run).
+  // 2. Check upstream PromptConstructor for multimodal parts
   if (!parts) {
     const allEdges = getEdges();
     const allNodes = getNodes();
@@ -84,22 +80,30 @@ export async function executeLlmGenerate(
       .find((n) => n?.type === "promptConstructor");
     if (upstreamPcNode) {
       const pcData = upstreamPcNode.data as PromptConstructorNodeData;
-      const pcImageSources = allEdges
-        .filter((e) => e.target === upstreamPcNode.id && e.targetHandle === "image")
-        .map((e) => allNodes.find((n) => n.id === e.source))
-        .filter((n): n is typeof allNodes[number] => n !== undefined);
-      const freshNamedImages: Record<string, string> = {};
-      for (const src of pcImageSources) {
-        if (src.type === "imageInput") {
-          const imgData = src.data as ImageInputNodeData;
-          if (imgData.variableName && imgData.image) {
-            freshNamedImages[imgData.variableName] = imgData.image;
+      if (useStoredFallback) {
+        // Single-node regeneration: re-resolve from fresh imageInput data
+        const pcImageSources = allEdges
+          .filter((e) => e.target === upstreamPcNode.id && e.targetHandle === "image")
+          .map((e) => allNodes.find((n) => n.id === e.source))
+          .filter((n): n is typeof allNodes[number] => n !== undefined);
+        const freshNamedImages: Record<string, string> = {};
+        for (const src of pcImageSources) {
+          if (src.type === "imageInput") {
+            const imgData = src.data as ImageInputNodeData;
+            if (imgData.variableName && imgData.image) {
+              freshNamedImages[imgData.variableName] = imgData.image;
+            }
           }
         }
-      }
-      const resolvedText = pcData.outputText ?? pcData.template ?? text;
-      if (Object.keys(freshNamedImages).length > 0 && resolvedText && hasImageVarReferences(resolvedText, freshNamedImages)) {
-        parts = resolveImageVars(resolvedText, freshNamedImages);
+        const resolvedText = pcData.outputText ?? pcData.template ?? text;
+        if (Object.keys(freshNamedImages).length > 0 && resolvedText && hasImageVarReferences(resolvedText, freshNamedImages)) {
+          parts = resolveImageVars(resolvedText, freshNamedImages);
+        }
+      } else {
+        // Full workflow execution: PC just executed, its outputParts are fresh
+        if (pcData.outputParts && pcData.outputParts.length > 0) {
+          parts = pcData.outputParts;
+        }
       }
     }
   }
