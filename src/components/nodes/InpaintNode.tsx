@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { InpaintNodeData, InpaintProvider } from "@/types";
 import { InpaintMaskModal } from "@/components/InpaintMaskModal";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
+import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
 
 type InpaintNodeType = Node<InpaintNodeData, "inpaint">;
 
@@ -20,8 +21,32 @@ export function InpaintNode({ id, data, selected }: NodeProps<InpaintNodeType>) 
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const [maskModalOpen, setMaskModalOpen] = useState(false);
 
+  // Reactively read connected image from upstream nodes
+  const connectedImage = useWorkflowStore((state) => {
+    const { images } = getConnectedInputsPure(id, state.nodes, state.edges);
+    return images[0] ?? null;
+  });
+
+  const connectedText = useWorkflowStore((state) => {
+    const { text } = getConnectedInputsPure(id, state.nodes, state.edges);
+    return text;
+  });
+
+  // Sync connected inputs into node data so executor and mask modal can use them
+  useEffect(() => {
+    if (connectedImage && connectedImage !== data.inputImage) {
+      updateNodeData(id, { inputImage: connectedImage });
+    }
+  }, [connectedImage, data.inputImage, id, updateNodeData]);
+
+  useEffect(() => {
+    if (connectedText !== undefined && connectedText !== data.inputPrompt) {
+      updateNodeData(id, { inputPrompt: connectedText });
+    }
+  }, [connectedText, data.inputPrompt, id, updateNodeData]);
+
   const adaptiveOutputImage = useAdaptiveImageSrc(data.outputImage, id);
-  const adaptiveInputImage = useAdaptiveImageSrc(data.inputImage, id);
+  const adaptiveInputImage = useAdaptiveImageSrc(connectedImage || data.inputImage, id);
 
   const handleGenerate = useCallback(() => {
     regenerateNode(id);
@@ -44,8 +69,8 @@ export function InpaintNode({ id, data, selected }: NodeProps<InpaintNodeType>) 
 
   const displayImage = adaptiveOutputImage || adaptiveInputImage;
   const hasMask = !!data.maskImage;
-  const hasInput = !!data.inputImage;
-  const hasPrompt = !!data.inputPrompt;
+  const hasInput = !!(connectedImage || data.inputImage);
+  const hasPrompt = !!(connectedText || data.inputPrompt);
   const canGenerate = hasInput && hasMask && hasPrompt;
 
   return (
@@ -137,10 +162,10 @@ export function InpaintNode({ id, data, selected }: NodeProps<InpaintNodeType>) 
       </BaseNode>
 
       {/* Mask drawing modal */}
-      {maskModalOpen && data.inputImage && (
+      {maskModalOpen && (connectedImage || data.inputImage) && (
         <InpaintMaskModal
           isOpen={maskModalOpen}
-          sourceImage={data.inputImage}
+          sourceImage={(connectedImage || data.inputImage)!}
           existingMask={data.maskImage}
           brushSize={data.maskBrushSize}
           onClose={() => setMaskModalOpen(false)}
