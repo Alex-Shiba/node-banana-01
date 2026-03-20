@@ -35,6 +35,7 @@ const VALID_NODE_TYPES: NodeType[] = [
   "switch",
   "conditionalSwitch",
   "glbViewer",
+  "inpaint",
 ];
 
 const VALID_HANDLE_TYPES = ["image", "text", "audio", "video", "easeCurve", "3d", "reference"];
