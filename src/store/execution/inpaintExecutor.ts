@@ -32,7 +32,7 @@ export async function executeInpaint(ctx: NodeExecutionContext): Promise<void> {
   // Determine source image (connected or stored)
   const hasIncomingEdges = getEdges().some((e) => e.target === node.id);
   const sourceImage = connectedImages[0] ?? (hasIncomingEdges ? nodeData.inputImage : null);
-  const promptText = connectedText ?? (hasIncomingEdges ? nodeData.inputPrompt : null);
+  const promptText = connectedText ?? nodeData.inputPrompt ?? "Regenerate the masked area naturally, matching the surrounding context";
   const maskImage = nodeData.maskImage;
 
   if (!sourceImage) {
@@ -43,11 +43,6 @@ export async function executeInpaint(ctx: NodeExecutionContext): Promise<void> {
   if (!maskImage) {
     updateNodeData(node.id, { status: "error", error: "No mask drawn — draw a mask first" });
     throw new Error("No mask drawn");
-  }
-
-  if (!promptText) {
-    updateNodeData(node.id, { status: "error", error: "Missing text prompt" });
-    throw new Error("Missing text prompt");
   }
 
   updateNodeData(node.id, {

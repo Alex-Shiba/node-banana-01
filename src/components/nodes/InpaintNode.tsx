@@ -71,7 +71,14 @@ export function InpaintNode({ id, data, selected }: NodeProps<InpaintNodeType>) 
   const hasMask = !!data.maskImage;
   const hasInput = !!(connectedImage || data.inputImage);
   const hasPrompt = !!(connectedText || data.inputPrompt);
-  const canGenerate = hasInput && hasMask && hasPrompt;
+  // Image + mask required; prompt is optional (will use default if not connected)
+  const canGenerate = hasInput && hasMask;
+
+  // Status hint for user
+  let statusHint: string | null = null;
+  if (!hasInput) statusHint = "Connect an image";
+  else if (!hasMask) statusHint = "Draw a mask";
+  else if (!hasPrompt) statusHint = "No prompt — will use default";
 
   return (
     <>
@@ -93,7 +100,7 @@ export function InpaintNode({ id, data, selected }: NodeProps<InpaintNodeType>) 
             )}
 
             {/* Mask overlay indicator */}
-            {hasMask && data.inputImage && (
+            {hasMask && hasInput && (
               <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-white/20 text-[10px] text-white">
                 Masked
               </div>
@@ -151,6 +158,13 @@ export function InpaintNode({ id, data, selected }: NodeProps<InpaintNodeType>) 
           >
             {data.status === "loading" ? "Generating..." : "Inpaint"}
           </button>
+
+          {/* Status hint */}
+          {statusHint && data.status !== "loading" && !data.error && (
+            <div className="text-[10px] text-neutral-500 text-center">
+              {statusHint}
+            </div>
+          )}
 
           {/* Error display */}
           {data.error && (

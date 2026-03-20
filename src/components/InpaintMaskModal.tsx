@@ -29,7 +29,7 @@ export function InpaintMaskModal({
   const [maskImage, setMaskImage] = useState<HTMLImageElement | null>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
   const [scale, setScale] = useState(1);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const isDrawingRef = useRef(false);
   const [tool, setTool] = useState<"brush" | "eraser">("brush");
   const [brushSize, setBrushSize] = useState(initialBrushSize);
   const [lines, setLines] = useState<{ points: number[]; stroke: string; strokeWidth: number }[]>([]);
@@ -72,10 +72,12 @@ export function InpaintMaskModal({
     return { x: pos.x / scale, y: pos.y / scale };
   }, [scale]);
 
-  const handleMouseDown = useCallback(() => {
+  const handleMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    // Only draw with left mouse button (button 0) or touch
+    if (e.evt instanceof MouseEvent && e.evt.button !== 0) return;
     const pos = getPointerPos();
     if (!pos) return;
-    setIsDrawing(true);
+    isDrawingRef.current = true;
     const stroke = tool === "brush" ? "#ffffff" : "#000000";
     setLines((prev) => [...prev, { points: [pos.x, pos.y], stroke, strokeWidth: brushSize }]);
   }, [getPointerPos, tool, brushSize]);
@@ -84,19 +86,19 @@ export function InpaintMaskModal({
     const pos = getPointerPos();
     if (!pos) return;
     setCursorPos({ x: pos.x * scale, y: pos.y * scale });
-    if (!isDrawing) return;
+    if (!isDrawingRef.current) return;
     setLines((prev) => {
       const updated = [...prev];
       const last = updated[updated.length - 1];
       if (last) {
-        last.points = [...last.points, pos.x, pos.y];
+        updated[updated.length - 1] = { ...last, points: [...last.points, pos.x, pos.y] };
       }
       return updated;
     });
-  }, [getPointerPos, isDrawing, scale]);
+  }, [getPointerPos, scale]);
 
   const handleMouseUp = useCallback(() => {
-    setIsDrawing(false);
+    isDrawingRef.current = false;
   }, []);
 
   const handleClear = useCallback(() => {
@@ -161,7 +163,22 @@ export function InpaintMaskModal({
     onSave(maskDataUrl, brushSize);
   }, [image, maskImage, lines, brushSize, onSave]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "b") setTool("brush");
+      if (e.key === "e") setTool("eraser");
+      if (e.key === "[") setBrushSize((prev) => BRUSH_SIZES[Math.max(0, BRUSH_SIZES.indexOf(prev) - 1)] ?? prev);
+      if (e.key === "]") setBrushSize((prev) => BRUSH_SIZES[Math.min(BRUSH_SIZES.length - 1, BRUSH_SIZES.indexOf(prev) + 1)] ?? prev);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   if (!isOpen) return null;
+
+  const hasStrokes = lines.length > 0 || maskImage !== null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
@@ -179,19 +196,19 @@ export function InpaintMaskModal({
             className={`px-2 py-1 rounded text-xs ${tool === "brush" ? "bg-white text-black" : "bg-neutral-700 text-neutral-300"}`}
             onClick={() => setTool("brush")}
           >
-            Brush
+            Brush (B)
           </button>
           <button
             className={`px-2 py-1 rounded text-xs ${tool === "eraser" ? "bg-white text-black" : "bg-neutral-700 text-neutral-300"}`}
             onClick={() => setTool("eraser")}
           >
-            Eraser
+            Eraser (E)
           </button>
 
           <div className="w-px h-5 bg-neutral-700" />
 
           {/* Brush size */}
-          <span className="text-xs text-neutral-400">Size:</span>
+          <span className="text-xs text-neutral-400">Size [ ]:</span>
           {BRUSH_SIZES.map((s) => (
             <button
               key={s}
@@ -207,8 +224,12 @@ export function InpaintMaskModal({
           <button className="px-2 py-1 rounded text-xs bg-neutral-700 text-neutral-300 hover:bg-neutral-600" onClick={handleClear}>
             Clear
           </button>
-          <button className="px-3 py-1 rounded text-xs bg-blue-600 text-white hover:bg-blue-500" onClick={handleSave}>
-            Done
+          <button
+            className={`px-3 py-1 rounded text-xs ${hasStrokes ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-neutral-700 text-neutral-400 cursor-not-allowed"}`}
+            onClick={handleSave}
+            disabled={!hasStrokes}
+          >
+            Save Mask
           </button>
           <button className="px-2 py-1 rounded text-xs bg-neutral-700 text-neutral-300 hover:bg-neutral-600" onClick={onClose}>
             Cancel
@@ -226,11 +247,14 @@ export function InpaintMaskModal({
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
-            onMouseLeave={() => { setIsDrawing(false); setCursorPos(null); }}
+            onMouseLeave={() => { isDrawingRef.current = false; setCursorPos(null); }}
+            onTouchStart={handleMouseDown}
+            onTouchMove={handleMouseMove}
+            onTouchEnd={handleMouseUp}
             style={{ cursor: "none" }}
           >
             <Layer>
-              {/* Source image */}
+              {/* Source image at lower opacity */}
               {image && <KonvaImage image={image} x={0} y={0} opacity={0.5} />}
 
               {/* Existing mask overlay */}
@@ -257,8 +281,8 @@ export function InpaintMaskModal({
             <div
               className="pointer-events-none absolute rounded-full border-2 border-white/80"
               style={{
-                left: cursorPos.x - (brushSize * scale) / 2,
-                top: cursorPos.y - (brushSize * scale) / 2 + 20, // +20 for padding
+                left: cursorPos.x - (brushSize * scale) / 2 + 20,
+                top: cursorPos.y - (brushSize * scale) / 2 + 20,
                 width: brushSize * scale,
                 height: brushSize * scale,
               }}
@@ -267,7 +291,7 @@ export function InpaintMaskModal({
         </div>
 
         <div className="px-4 py-2 border-t border-neutral-700 text-xs text-neutral-500">
-          Paint white areas to mark regions for regeneration. Use eraser to remove mask.
+          Hold mouse button to paint. White = area to regenerate. Shortcuts: B=brush, E=eraser, [/]=brush size, Esc=cancel
         </div>
       </div>
     </div>
