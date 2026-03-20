@@ -73,109 +73,167 @@ export function InpaintNode({ id, data, selected }: NodeProps<InpaintNodeType>) 
   const hasPrompt = !!(connectedText || data.inputPrompt);
   // Image + mask required; prompt is optional (will use default if not connected)
   const canGenerate = hasInput && hasMask;
-
-  // Status hint for user
-  let statusHint: string | null = null;
-  if (!hasInput) statusHint = "Connect an image";
-  else if (!hasMask) statusHint = "Draw a mask";
-  else if (!hasPrompt) statusHint = "No prompt — will use default";
+  const isRunning = data.status === "loading";
 
   return (
     <>
-      <BaseNode id={id} selected={selected}>
+      <BaseNode
+        id={id}
+        selected={selected}
+        isExecuting={isRunning}
+        hasError={data.status === "error"}
+        fullBleed
+        aspectFitMedia={data.outputImage}
+      >
         {/* Input handles */}
-        <Handle type="target" position={Position.Left} id="image" style={{ top: "40%" }} />
-        <Handle type="target" position={Position.Left} id="text" style={{ top: "60%" }} />
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="image"
+          style={{ top: "35%", zIndex: 10 }}
+          data-handletype="image"
+          isConnectable={true}
+        />
+        <div
+          className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
+          style={{
+            right: `calc(100% + 8px)`,
+            top: "calc(35% - 18px)",
+            color: "var(--handle-color-image)",
+            zIndex: 10,
+          }}
+        >
+          Image
+        </div>
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="text"
+          style={{ top: "65%", zIndex: 10 }}
+          data-handletype="text"
+          isConnectable={true}
+        />
+        <div
+          className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
+          style={{
+            right: `calc(100% + 8px)`,
+            top: "calc(65% - 18px)",
+            color: "var(--handle-color-text)",
+            zIndex: 10,
+          }}
+        >
+          Prompt
+        </div>
 
         {/* Output handle */}
-        <Handle type="source" position={Position.Right} id="image" />
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="image"
+          style={{ top: "50%", zIndex: 10 }}
+          data-handletype="image"
+        />
+        <div
+          className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none"
+          style={{
+            left: `calc(100% + 8px)`,
+            top: "calc(50% - 18px)",
+            color: "var(--handle-color-image)",
+            zIndex: 10,
+          }}
+        >
+          Image
+        </div>
 
-        <div className="p-2 space-y-2">
+        <div className="relative w-full h-full min-h-0 overflow-hidden rounded-lg">
           {/* Image preview */}
-          <div className="relative w-full aspect-square bg-neutral-800 rounded overflow-hidden flex items-center justify-center">
-            {displayImage ? (
-              <img src={displayImage} alt="Preview" className="w-full h-full object-contain" />
-            ) : (
+          {displayImage ? (
+            <img src={displayImage} alt="Preview" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-neutral-900/40">
               <span className="text-neutral-500 text-xs">Connect image</span>
-            )}
-
-            {/* Mask overlay indicator */}
-            {hasMask && hasInput && (
-              <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-white/20 text-[10px] text-white">
-                Masked
-              </div>
-            )}
-
-            {/* Status overlay */}
-            {data.status === "loading" && (
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              </div>
-            )}
-          </div>
-
-          {/* Provider selection */}
-          <div className="flex gap-1">
-            {PROVIDER_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                className={`flex-1 px-2 py-1 rounded text-xs ${
-                  data.inpaintProvider === opt.value
-                    ? "bg-blue-600 text-white"
-                    : "bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
-                }`}
-                onClick={() => handleProviderChange(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Draw mask button */}
-          <button
-            className={`w-full px-2 py-1.5 rounded text-xs font-medium ${
-              hasInput
-                ? hasMask
-                  ? "bg-neutral-700 text-white hover:bg-neutral-600"
-                  : "bg-orange-600 text-white hover:bg-orange-500"
-                : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
-            }`}
-            onClick={() => hasInput && setMaskModalOpen(true)}
-            disabled={!hasInput}
-          >
-            {hasMask ? "Edit Mask" : "Draw Mask"}
-          </button>
-
-          {/* Generate button */}
-          <button
-            className={`w-full px-2 py-1.5 rounded text-xs font-medium ${
-              canGenerate && data.status !== "loading"
-                ? "bg-green-600 text-white hover:bg-green-500"
-                : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
-            }`}
-            onClick={handleGenerate}
-            disabled={!canGenerate || data.status === "loading"}
-          >
-            {data.status === "loading" ? "Generating..." : "Inpaint"}
-          </button>
-
-          {/* Status hint */}
-          {statusHint && data.status !== "loading" && !data.error && (
-            <div className="text-[10px] text-neutral-500 text-center">
-              {statusHint}
             </div>
           )}
 
-          {/* Error display */}
-          {data.error && (
-            <div className="text-[10px] text-red-400 truncate" title={data.error}>
+          {/* Mask overlay indicator */}
+          {hasMask && hasInput && (
+            <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-white/20 text-[10px] text-white backdrop-blur-sm">
+              Masked
+            </div>
+          )}
+
+          {/* Loading overlay */}
+          {isRunning && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            </div>
+          )}
+
+          {/* Error overlay */}
+          {data.error && !isRunning && (
+            <div className="absolute inset-x-0 top-0 px-2 py-1 bg-red-900/80 text-[10px] text-red-200 truncate" title={data.error}>
               {data.error}
             </div>
           )}
+
+          {/* Bottom controls overlay */}
+          <div className="nodrag nopan absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent pt-8 pb-2 px-2 space-y-1.5">
+            {/* Provider selection */}
+            <div className="flex gap-1">
+              {PROVIDER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  className={`flex-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                    data.inpaintProvider === opt.value
+                      ? "bg-blue-600 text-white"
+                      : "bg-neutral-800/80 text-neutral-300 hover:bg-neutral-700/80"
+                  }`}
+                  onClick={() => handleProviderChange(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-1">
+              <button
+                className={`flex-1 px-2 py-1.5 rounded text-[11px] font-medium transition-colors ${
+                  hasInput
+                    ? hasMask
+                      ? "bg-neutral-700/80 text-white hover:bg-neutral-600/80"
+                      : "bg-orange-600 text-white hover:bg-orange-500"
+                    : "bg-neutral-800/60 text-neutral-500 cursor-not-allowed"
+                }`}
+                onClick={() => hasInput && setMaskModalOpen(true)}
+                disabled={!hasInput}
+              >
+                {hasMask ? "Edit Mask" : "Draw Mask"}
+              </button>
+              <button
+                className={`flex-1 px-2 py-1.5 rounded text-[11px] font-medium transition-colors ${
+                  canGenerate && !isRunning
+                    ? "bg-green-600 text-white hover:bg-green-500"
+                    : "bg-neutral-800/60 text-neutral-500 cursor-not-allowed"
+                }`}
+                onClick={handleGenerate}
+                disabled={!canGenerate || isRunning}
+              >
+                {isRunning ? "Generating..." : "Inpaint"}
+              </button>
+            </div>
+
+            {/* Status hint */}
+            {!hasInput && !data.error && !isRunning && (
+              <div className="text-[10px] text-neutral-400 text-center">
+                Connect an image to get started
+              </div>
+            )}
+          </div>
         </div>
       </BaseNode>
 
-      {/* Mask drawing modal */}
+      {/* Mask drawing modal - rendered via portal in InpaintMaskModal */}
       {maskModalOpen && (connectedImage || data.inputImage) && (
         <InpaintMaskModal
           isOpen={maskModalOpen}

@@ -71,7 +71,7 @@ export async function executeInpaint(ctx: NodeExecutionContext): Promise<void> {
         timestamp,
         prompt: promptText,
         aspectRatio: "1:1" as const,
-        model: "inpaint" as const,
+        model: "nano-banana-pro" as const,
       };
       const updatedHistory = [newHistoryItem, ...(nodeData.imageHistory || [])].slice(0, 50);
 
@@ -151,7 +151,6 @@ async function inpaintWithGemini(
       images: [sourceImage, maskImage],
       prompt: inpaintPrompt,
       model: "nano-banana-pro",
-      aspectRatio: "1:1",
     }),
     ...(signal ? { signal } : {}),
   });

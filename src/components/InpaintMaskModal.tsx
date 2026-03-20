@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Stage, Layer, Image as KonvaImage, Line } from "react-konva";
 import Konva from "konva";
 
@@ -180,7 +181,7 @@ export function InpaintMaskModal({
 
   const hasStrokes = lines.length > 0 || maskImage !== null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
       <div
         className="bg-neutral-900 rounded-lg border border-neutral-700 flex flex-col max-w-[90vw] max-h-[90vh]"
@@ -294,6 +295,7 @@ export function InpaintMaskModal({
           Hold mouse button to paint. White = area to regenerate. Shortcuts: B=brush, E=eraser, [/]=brush size, Esc=cancel
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
