@@ -95,8 +95,8 @@ export function SplitGridSettingsModal({
   const [selectedLayoutIndex, setSelectedLayoutIndex] = useState(
     initialPresetIdx >= 0 ? initialPresetIdx : -1
   );
-  const [customRows, setCustomRows] = useState(nodeData.gridRows);
-  const [customCols, setCustomCols] = useState(nodeData.gridCols);
+  const [customRows, setCustomRows] = useState(Math.max(1, Math.min(10, nodeData.gridRows)));
+  const [customCols, setCustomCols] = useState(Math.max(1, Math.min(10, nodeData.gridCols)));
   const [cellAspectRatio, setCellAspectRatio] = useState(0); // 0 = auto
   const [sourceDims, setSourceDims] = useState<{ width: number; height: number } | null>(null);
   const [defaultPrompt, setDefaultPrompt] = useState(nodeData.defaultPrompt);

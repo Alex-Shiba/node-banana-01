@@ -13,7 +13,6 @@ import type {
   PromptConstructorNodeData,
   PromptNodeData,
   LLMGenerateNodeData,
-  ImageInputNodeData,
   OutputNodeData,
   OutputGalleryNodeData,
   PromptPart,
@@ -102,7 +101,7 @@ export async function executeArray(ctx: NodeExecutionContext): Promise<void> {
  * PromptConstructor node: resolves @variables from connected prompt nodes.
  */
 export async function executePromptConstructor(ctx: NodeExecutionContext): Promise<void> {
-  const { node, updateNodeData, getFreshNode, getEdges, getNodes } = ctx;
+  const { node, updateNodeData, getFreshNode, getEdges, getNodes, getConnectedInputs } = ctx;
   try {
     // Get fresh node data from store
     const freshNode = getFreshNode(node.id);
@@ -118,11 +117,8 @@ export async function executePromptConstructor(ctx: NodeExecutionContext): Promi
       .map((e) => nodes.find((n) => n.id === e.source))
       .filter((n): n is WorkflowNode => n !== undefined);
 
-    // Find all connected image nodes
-    const connectedImageNodes = edges
-      .filter((e) => e.target === node.id && e.targetHandle === "image")
-      .map((e) => nodes.find((n) => n.id === e.source))
-      .filter((n): n is WorkflowNode => n !== undefined);
+    // Get namedImages via getConnectedInputs (handles router/switch passthroughs)
+    const { namedImages } = getConnectedInputs(node.id);
 
     // Build variable map: named variables from Prompt nodes take precedence
     const variableMap: Record<string, string> = {};
@@ -131,17 +127,6 @@ export async function executePromptConstructor(ctx: NodeExecutionContext): Promi
         const promptData = srcNode.data as PromptNodeData;
         if (promptData.variableName) {
           variableMap[promptData.variableName] = promptData.prompt;
-        }
-      }
-    });
-
-    // Build named images map from connected ImageInput nodes with variableName
-    const namedImages: Record<string, string> = {};
-    connectedImageNodes.forEach((srcNode) => {
-      if (srcNode.type === "imageInput") {
-        const imgData = srcNode.data as ImageInputNodeData;
-        if (imgData.variableName && imgData.image) {
-          namedImages[imgData.variableName] = imgData.image;
         }
       }
     });
