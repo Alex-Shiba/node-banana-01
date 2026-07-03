@@ -5,8 +5,9 @@
  * Used by both executeWorkflow and regenerateNode.
  */
 
-import type { GenerateVideoNodeData } from "@/types";
+import type { GenerateVideoNodeData, PromptPart, PromptConstructorNodeData } from "@/types";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
+import { resolveImageVars, hasImageVarReferences } from "@/utils/resolveImageVars";
 import type { NodeExecutionContext } from "./types";
 
 export interface GenerateVideoOptions {
@@ -34,7 +35,7 @@ export async function executeGenerateVideo(
 
   const { useStoredFallback = false } = options;
 
-  const { images: connectedImages, text: connectedText, dynamicInputs } = getConnectedInputs(node.id);
+  const { images: connectedImages, text: connectedText, namedImages = {}, dynamicInputs } = getConnectedInputs(node.id);
 
   // Get fresh node data from store
   const freshNode = getFreshNode(node.id);
@@ -89,6 +90,29 @@ export async function executeGenerateVideo(
   const provider = nodeData.selectedModel.provider;
   const headers = buildGenerateHeaders(provider, providerSettings);
 
+  // Multimodal parts from image variable references (same logic as nanoBanana).
+  // Gemini Omni models consume these as interleaved image/text input.
+  let parts: PromptPart[] | undefined;
+
+  // 1. Direct namedImages (imageInput with variable name connected to this node)
+  if (Object.keys(namedImages).length > 0 && text && hasImageVarReferences(text, namedImages)) {
+    parts = resolveImageVars(text, namedImages);
+  }
+
+  // 2. Upstream PromptConstructor with multimodal outputParts
+  if (!parts) {
+    const upstreamPcNode = getEdges()
+      .filter((e) => e.target === node.id && (e.targetHandle === "text" || e.targetHandle?.startsWith("text")))
+      .map((e) => getNodes().find((n) => n.id === e.source))
+      .find((n) => n?.type === "promptConstructor");
+    if (upstreamPcNode) {
+      const pcData = upstreamPcNode.data as PromptConstructorNodeData;
+      if (pcData.outputParts && pcData.outputParts.length > 0) {
+        parts = pcData.outputParts;
+      }
+    }
+  }
+
   const requestPayload = {
     images,
     prompt: text,
@@ -96,6 +120,7 @@ export async function executeGenerateVideo(
     parameters: nodeData.parameters,
     dynamicInputs,
     mediaType: "video" as const,
+    ...(parts && { parts }),
   };
 
   try {

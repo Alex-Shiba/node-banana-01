@@ -497,6 +497,7 @@ export async function POST(request: NextRequest) {
         images || [],
         veoParams,
         dynamicInputs,
+        parts as Array<{ type: string; value: string; name?: string }> | undefined,
       );
 
       if (!result.success) {

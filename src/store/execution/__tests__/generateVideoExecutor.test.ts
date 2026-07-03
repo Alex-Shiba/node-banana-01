@@ -277,3 +277,52 @@ describe("executeGenerateVideo", () => {
     expect(videoHistory.length).toBe(50); // capped at 50
   });
 });
+
+describe("executeGenerateVideo image variables (multimodal parts)", () => {
+  it("should forward upstream PromptConstructor outputParts as parts", async () => {
+    const node = makeNode({
+      selectedModel: { provider: "gemini", modelId: "omni-flash/reference-to-video", displayName: "Omni Ref" },
+    });
+    const pcNode = {
+      id: "pc-1",
+      type: "promptConstructor",
+      position: { x: 0, y: 0 },
+      data: {
+        outputParts: [
+          { type: "image", name: "cat", value: "data:image/png;base64,CAT=" },
+          { type: "text", value: "dances on a rooftop" },
+        ],
+      },
+    } as unknown as WorkflowNode;
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ success: true, video: "data:video/mp4;base64,output" }),
+    });
+
+    const ctx = makeCtx(node, {
+      getEdges: vi.fn().mockReturnValue([
+        { id: "e1", source: "pc-1", target: "vid-1", targetHandle: "text-0" },
+      ]),
+      getNodes: vi.fn().mockReturnValue([node, pcNode]),
+    });
+    await executeGenerateVideo(ctx);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.parts).toEqual((pcNode.data as Record<string, unknown>).outputParts);
+  });
+
+  it("should not include parts when no PromptConstructor is connected", async () => {
+    const node = makeNode();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ success: true, video: "data:video/mp4;base64,output" }),
+    });
+
+    const ctx = makeCtx(node);
+    await executeGenerateVideo(ctx);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.parts).toBeUndefined();
+  });
+});

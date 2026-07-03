@@ -255,10 +255,11 @@ export async function generateWithGeminiVideo(
   images: string[],
   parameters: Record<string, unknown> = {},
   dynamicInputs?: Record<string, string | string[]>,
+  parts?: Array<{ type: string; value: string; name?: string }>,
 ): Promise<GenerationOutput> {
   // Omni models use the Interactions API instead of the Veo operations flow
   if (OMNI_MODEL_MAP[modelId]) {
-    return generateWithGeminiOmniVideo(requestId, apiKey, modelId, prompt, images, parameters, dynamicInputs);
+    return generateWithGeminiOmniVideo(requestId, apiKey, modelId, prompt, images, parameters, dynamicInputs, parts);
   }
 
   const apiModelId = VEO_MODEL_MAP[modelId];
@@ -631,16 +632,35 @@ async function generateWithGeminiOmniVideo(
   images: string[],
   parameters: Record<string, unknown> = {},
   dynamicInputs?: Record<string, string | string[]>,
+  parts?: Array<{ type: string; value: string; name?: string }>,
 ): Promise<GenerationOutput> {
   const apiModelId = OMNI_MODEL_MAP[modelId];
   const task = OMNI_TASK_MAP[modelId];
 
-  console.log(`[API:${requestId}] Gemini Omni video generation - Model: ${apiModelId}, Task: ${task}, Prompt: ${prompt?.length || 0} chars, Images: ${images?.length || 0}`);
+  console.log(`[API:${requestId}] Gemini Omni video generation - Model: ${apiModelId}, Task: ${task}, Prompt: ${prompt?.length || 0} chars, Images: ${images?.length || 0}, Parts: ${parts?.length || 0}`);
+
+  // Multimodal parts from prompt-constructor image variables: the image sits
+  // at the exact position it was referenced in the text, which is precisely
+  // the Interactions API input format
+  const usableParts = (parts || []).filter((p) => p.value);
+  const partImages = usableParts.filter((p) => p.type === "image");
 
   // Build the input parts per task
   let input: unknown = prompt;
 
-  if (task === "image_to_video") {
+  if (task !== "edit" && partImages.length > 0) {
+    // Images wired directly to the node that aren't already referenced as
+    // variables go first, then the authored interleaved sequence
+    const directExtra = (images || []).filter(
+      (img) => !partImages.some((p) => p.value === img)
+    );
+    input = [
+      ...directExtra.map(toOmniImagePart),
+      ...usableParts.map((p) =>
+        p.type === "image" ? toOmniImagePart(p.value) : { type: "text", text: p.value }
+      ),
+    ];
+  } else if (task === "image_to_video") {
     if (!images || images.length === 0) {
       console.error(`[API:${requestId}] Image required for image-to-video model: ${modelId}`);
       return { success: false, error: "Image required for image-to-video model" };
@@ -649,7 +669,7 @@ async function generateWithGeminiOmniVideo(
   } else if (task === "reference_to_video") {
     if (!images || images.length === 0) {
       console.error(`[API:${requestId}] Reference images required for model: ${modelId}`);
-      return { success: false, error: "Connect at least one reference image" };
+      return { success: false, error: "Connect at least one reference image or use image variables in the prompt" };
     }
     input = [...images.map(toOmniImagePart), { type: "text", text: prompt }];
   } else if (task === "edit") {

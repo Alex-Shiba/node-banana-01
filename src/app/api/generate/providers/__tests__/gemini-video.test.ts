@@ -598,3 +598,82 @@ describe("generateWithGeminiVideo (Omni reference-to-video and edit)", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });
+
+describe("generateWithGeminiVideo (Omni image variables / interleaved parts)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    MockGoogleGenAI.reset();
+  });
+
+  it("should build interleaved input from parts, prepending direct images", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: "v1_parts",
+          status: "completed",
+          output_video: { type: "video", mime_type: "video/mp4", data: "EEEE" },
+        }),
+    });
+
+    const result = await generateWithGeminiVideo(
+      "test-omni-parts-001",
+      "test-api-key",
+      "omni-flash/reference-to-video",
+      "put @cat into @car",
+      ["data:image/png;base64,DIRECT="],
+      { aspectRatio: "16:9" },
+      {},
+      [
+        { type: "text", value: "put" },
+        { type: "image", name: "cat", value: "data:image/png;base64,CAT=" },
+        { type: "text", value: "into" },
+        { type: "image", name: "car", value: "data:image/jpeg;base64,CAR=" },
+      ],
+    );
+
+    expect(result.success).toBe(true);
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.input).toEqual([
+      { type: "image", data: "DIRECT=", mime_type: "image/png" },
+      { type: "text", text: "put" },
+      { type: "image", data: "CAT=", mime_type: "image/png" },
+      { type: "text", text: "into" },
+      { type: "image", data: "CAR=", mime_type: "image/jpeg" },
+    ]);
+    expect(body.generation_config).toEqual({ video_config: { task: "reference_to_video" } });
+  });
+
+  it("should accept parts-only references without direct image connections", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: "v1_parts2",
+          status: "completed",
+          output_video: { type: "video", mime_type: "video/mp4", data: "FFFF" },
+        }),
+    });
+
+    const result = await generateWithGeminiVideo(
+      "test-omni-parts-002",
+      "test-api-key",
+      "omni-flash/reference-to-video",
+      "@hero waves",
+      [],
+      {},
+      {},
+      [
+        { type: "image", name: "hero", value: "data:image/png;base64,HERO=" },
+        { type: "text", value: "waves" },
+      ],
+    );
+
+    expect(result.success).toBe(true);
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.input).toEqual([
+      { type: "image", data: "HERO=", mime_type: "image/png" },
+      { type: "text", text: "waves" },
+    ]);
+  });
+});
