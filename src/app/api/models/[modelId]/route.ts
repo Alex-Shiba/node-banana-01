@@ -60,14 +60,14 @@ const TEXT_INPUT_NAMES = ["prompt", "negative_prompt"];
 // Properties that start with "image_" but are NOT image inputs
 const IMAGE_PREFIX_EXCLUSIONS = ["image_size"];
 
-// Parameters to filter out (internal/system params)
+// Parameters to filter out (internal/system params).
+// Safety-checker toggles are intentionally NOT excluded — providers like
+// WaveSpeed default them on and users need to disable them via the API.
 const EXCLUDED_PARAMS = new Set([
   "webhook",
   "webhook_events_filter",
   "sync_mode",
-  "disable_safety_checker",
   "go_fast",
-  "enable_safety_checker",
   "output_format",
   "output_quality",
   "request_id",

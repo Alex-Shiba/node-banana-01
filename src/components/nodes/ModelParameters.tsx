@@ -7,7 +7,8 @@ import { useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
 
 // localStorage cache for model schemas (persists across dev server restarts)
-const SCHEMA_CACHE_KEY = "node-banana-schema-cache";
+// v2: safety-checker params un-excluded, Gemini video schemas added
+const SCHEMA_CACHE_KEY = "node-banana-schema-cache-v2";
 const SCHEMA_CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours
 
 interface SchemaCacheEntry {
@@ -222,8 +223,9 @@ function ModelParametersInner({
       : sortedSchema;
   }, [sortedSchema, useGrid, colCount]);
 
-  // Don't render anything for Gemini or if no model selected
-  if (provider === "gemini" || !modelId) {
+  // Don't render if no model selected. Gemini renders only for its video
+  // models (Veo/Omni) — image models have bespoke node UI
+  if (!modelId || (provider === "gemini" && !isGeminiVideoModel)) {
     return null;
   }
 

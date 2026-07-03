@@ -97,6 +97,12 @@ describe("ModelParameters", () => {
           expect.anything()
         );
       });
+
+      // The parameter must actually render (regression: a second gemini
+      // guard in the render path used to return null after the fetch)
+      await waitFor(() => {
+        expect(screen.getByText("AspectRatio")).toBeInTheDocument();
+      });
     });
 
     it("should not render when modelId is empty", () => {
