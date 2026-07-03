@@ -424,6 +424,24 @@ const GEMINI_VIDEO_MODELS: ProviderModel[] = [
     coverImage: undefined,
     pricing: { type: "per-second", amount: 0.15, currency: "USD" },
   },
+  {
+    id: "omni-flash/text-to-video",
+    name: "Gemini Omni Flash",
+    description: "High-speed video generation with Gemini Omni Flash (gemini-omni-flash-preview). Generates 3-10 second 720p clips with real-world knowledge via the Gemini Interactions API.",
+    provider: "gemini",
+    capabilities: ["text-to-video"],
+    coverImage: undefined,
+    pricing: { type: "per-second", amount: 0.10, currency: "USD" },
+  },
+  {
+    id: "omni-flash/image-to-video",
+    name: "Gemini Omni Flash I2V",
+    description: "Image-to-video generation with Gemini Omni Flash (gemini-omni-flash-preview). Animates still images into 3-10 second 720p clips via the Gemini Interactions API.",
+    provider: "gemini",
+    capabilities: ["image-to-video"],
+    coverImage: undefined,
+    pricing: { type: "per-second", amount: 0.10, currency: "USD" },
+  },
 ];
 
 // WaveSpeed models are now fetched dynamically from https://api.wavespeed.ai/api/v3/models

@@ -202,6 +202,23 @@ const VEO_MODEL_MAP: Record<string, string> = {
 };
 
 /**
+ * Map internal Omni model IDs to Gemini API model IDs.
+ * Omni models use the Interactions API rather than the Veo generateVideos operation.
+ */
+const OMNI_MODEL_MAP: Record<string, string> = {
+  "omni-flash/text-to-video": "gemini-omni-flash-preview",
+  "omni-flash/image-to-video": "gemini-omni-flash-preview",
+};
+
+/** Returns true for any Gemini-native video model (Veo or Omni) */
+export function isGeminiVideoModel(modelId: string | undefined): boolean {
+  if (!modelId) return false;
+  // Prefix checks keep unknown veo-*/omni-* IDs on the video path so they
+  // surface a clear "unknown model" error instead of hitting the image API
+  return modelId.startsWith("veo-") || modelId.startsWith("omni-");
+}
+
+/**
  * Generate video using Gemini API (Veo models)
  */
 export async function generateWithGeminiVideo(
@@ -212,6 +229,11 @@ export async function generateWithGeminiVideo(
   images: string[],
   parameters: Record<string, unknown> = {},
 ): Promise<GenerationOutput> {
+  // Omni models use the Interactions API instead of the Veo operations flow
+  if (OMNI_MODEL_MAP[modelId]) {
+    return generateWithGeminiOmniVideo(requestId, apiKey, modelId, prompt, images, parameters);
+  }
+
   const apiModelId = VEO_MODEL_MAP[modelId];
   if (!apiModelId) {
     return { success: false, error: `Unknown Veo model: ${modelId}` };
@@ -352,4 +374,224 @@ export async function generateWithGeminiVideo(
   } finally {
     clearTimeout(fetchTimeout);
   }
+}
+
+const INTERACTIONS_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+
+/** A video content part returned by the Interactions API */
+interface OmniVideoContent {
+  type?: string;
+  mime_type?: string;
+  data?: string;
+  uri?: string;
+}
+
+/**
+ * Extract the video content part from an Interactions API response.
+ * The video may live in `output_video` or inside `steps[].content[]`.
+ */
+function extractOmniVideo(interaction: Record<string, unknown>): OmniVideoContent | null {
+  const outputVideo = interaction.output_video as OmniVideoContent | undefined;
+  if (outputVideo && (outputVideo.data || outputVideo.uri)) {
+    return outputVideo;
+  }
+
+  const steps = interaction.steps as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(steps)) {
+    for (const step of steps) {
+      if (step.type !== "model_output") continue;
+      const content = step.content as OmniVideoContent[] | undefined;
+      if (!Array.isArray(content)) continue;
+      for (const part of content) {
+        if (part.type === "video" && (part.data || part.uri)) {
+          return part;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Download a video delivered as a Files API URI: poll until the file is
+ * ACTIVE, then fetch its bytes via the :download endpoint.
+ */
+async function downloadOmniVideoFromUri(
+  requestId: string,
+  apiKey: string,
+  uri: string,
+): Promise<GenerationOutput> {
+  const fileIdMatch = uri.match(/files\/([a-zA-Z0-9_-]+)/);
+  if (!fileIdMatch) {
+    console.error(`[API:${requestId}] Unrecognized Omni video URI format: ${uri}`);
+    return { success: false, error: "Unrecognized video URI in Omni response" };
+  }
+  const fileName = `files/${fileIdMatch[1]}`;
+
+  // Poll file state until ACTIVE (5s intervals, 60s budget)
+  const POLL_INTERVAL = 5_000;
+  const POLL_TIMEOUT = 60_000;
+  const pollStart = Date.now();
+
+  while (true) {
+    const metaResponse = await fetch(`${INTERACTIONS_API_BASE}/${fileName}`, {
+      headers: { "x-goog-api-key": apiKey },
+    });
+    if (!metaResponse.ok) {
+      console.error(`[API:${requestId}] Omni file metadata fetch failed: ${metaResponse.status}`);
+      return { success: false, error: `Failed to fetch generated video metadata: ${metaResponse.status}` };
+    }
+    const meta = await metaResponse.json();
+    const state = typeof meta.state === "string" ? meta.state : meta.state?.name;
+    if (state === "ACTIVE") break;
+    if (state === "FAILED") {
+      return { success: false, error: "Video file processing failed" };
+    }
+    if (Date.now() - pollStart > POLL_TIMEOUT) {
+      return { success: false, error: "Timed out waiting for generated video file" };
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+  }
+
+  const downloadResponse = await fetch(`${INTERACTIONS_API_BASE}/${fileName}:download?alt=media`, {
+    headers: { "x-goog-api-key": apiKey },
+  });
+  if (!downloadResponse.ok) {
+    console.error(`[API:${requestId}] Omni video download failed: ${downloadResponse.status}`);
+    return { success: false, error: `Failed to download generated video: ${downloadResponse.status}` };
+  }
+
+  const videoBuffer = await downloadResponse.arrayBuffer();
+  const videoSizeMB = (videoBuffer.byteLength / (1024 * 1024)).toFixed(2);
+  console.log(`[API:${requestId}] Omni video downloaded: ${videoSizeMB}MB`);
+
+  const base64Video = Buffer.from(videoBuffer).toString("base64");
+  return {
+    success: true,
+    outputs: [{ type: "video", data: `data:video/mp4;base64,${base64Video}` }],
+  };
+}
+
+/**
+ * Generate video using the Gemini Interactions API (Omni models).
+ * Unlike Veo, this is a synchronous unary request — the response contains
+ * the video inline (base64) or as a Files API URI.
+ */
+async function generateWithGeminiOmniVideo(
+  requestId: string,
+  apiKey: string,
+  modelId: string,
+  prompt: string,
+  images: string[],
+  parameters: Record<string, unknown> = {},
+): Promise<GenerationOutput> {
+  const apiModelId = OMNI_MODEL_MAP[modelId];
+
+  console.log(`[API:${requestId}] Gemini Omni video generation - Model: ${apiModelId}, Prompt: ${prompt?.length || 0} chars, Images: ${images?.length || 0}`);
+
+  if (modelId.includes("image-to-video") && (!images || images.length === 0)) {
+    console.error(`[API:${requestId}] Image required for image-to-video model: ${modelId}`);
+    return { success: false, error: "Image required for image-to-video model" };
+  }
+
+  // Build the input: plain prompt for T2V, image + text parts for I2V
+  let input: unknown = prompt;
+  if (images && images.length > 0 && modelId.includes("image-to-video")) {
+    const imageInput = images[0];
+    let data = imageInput;
+    let mimeType = "image/png";
+    if (imageInput.includes("base64,")) {
+      const [header, base64Data] = imageInput.split("base64,");
+      const mimeMatch = header.match(/data:([^;]+)/);
+      if (mimeMatch) mimeType = mimeMatch[1];
+      data = base64Data;
+    }
+    input = [
+      { type: "image", data, mime_type: mimeType },
+      { type: "text", text: prompt },
+    ];
+  }
+
+  const responseFormat: Record<string, unknown> = { type: "video" };
+  if (parameters.aspectRatio) {
+    responseFormat.aspect_ratio = parameters.aspectRatio;
+  }
+
+  const requestBody = {
+    model: apiModelId,
+    input,
+    response_format: responseFormat,
+  };
+
+  // Synchronous unary call — budget most of the route's 5min for the POST,
+  // leaving room for a potential Files API download afterwards
+  const startTime = Date.now();
+  const controller = new AbortController();
+  const requestTimeout = setTimeout(() => controller.abort(), 4 * 60 * 1000);
+
+  let interaction: Record<string, unknown>;
+  try {
+    const response = await fetch(`${INTERACTIONS_API_BASE}/interactions`, {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `Omni generation failed: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error?.message || errorMessage;
+      } catch {
+        if (errorText) errorMessage += ` - ${errorText.substring(0, 200)}`;
+      }
+      console.error(`[API:${requestId}] ${errorMessage}`);
+      return { success: false, error: errorMessage };
+    }
+
+    interaction = await response.json();
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error(`[API:${requestId}] Omni generation timed out`);
+      return { success: false, error: "Video generation timed out after 4 minutes" };
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[API:${requestId}] Omni generation failed: ${msg}`);
+    return { success: false, error: `Video generation failed: ${msg}` };
+  } finally {
+    clearTimeout(requestTimeout);
+  }
+
+  const duration = Date.now() - startTime;
+  console.log(`[API:${requestId}] Omni generation completed in ${(duration / 1000).toFixed(1)}s (status: ${interaction.status})`);
+
+  const video = extractOmniVideo(interaction);
+  if (!video) {
+    const status = typeof interaction.status === "string" ? interaction.status : "unknown";
+    console.error(`[API:${requestId}] No video in Omni response (status: ${status})`);
+    return {
+      success: false,
+      error: status === "completed"
+        ? "No video generated. The content may have been filtered by safety policies."
+        : `No video generated (interaction status: ${status})`,
+    };
+  }
+
+  if (video.data) {
+    const mimeType = video.mime_type || "video/mp4";
+    const videoSizeMB = ((video.data.length * 0.75) / (1024 * 1024)).toFixed(2);
+    console.log(`[API:${requestId}] SUCCESS - Returning ${videoSizeMB}MB inline video`);
+    return {
+      success: true,
+      outputs: [{ type: "video", data: `data:${mimeType};base64,${video.data}` }],
+    };
+  }
+
+  return downloadOmniVideoFromUri(requestId, apiKey, video.uri!);
 }
