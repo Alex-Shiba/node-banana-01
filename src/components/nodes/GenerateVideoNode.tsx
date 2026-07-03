@@ -398,8 +398,9 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           onToggle={handleToggleParams}
           nodeId={id}
         >
-          {/* External provider parameters - reuse ModelParameters component */}
-          {nodeData.selectedModel?.modelId && !isVeoModel(nodeData.selectedModel.modelId) && (
+          {/* Model parameters — Gemini video models (Veo/Omni) get their schema
+              from getGeminiVideoSchema on the server, same as external providers */}
+          {nodeData.selectedModel?.modelId && (
             <ModelParameters
               modelId={nodeData.selectedModel.modelId}
               provider={currentProvider}

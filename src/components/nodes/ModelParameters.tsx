@@ -82,9 +82,14 @@ function ModelParametersInner({
   // Use stable selector for API keys to prevent unnecessary re-fetches
   const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey } = useProviderApiKeys();
 
-  // Fetch schema when modelId changes
+  // Fetch schema when modelId changes.
+  // Gemini is skipped for image models (they have bespoke node UI), but
+  // Gemini-native video models (Veo/Omni) have server schemas and go through.
+  const isGeminiVideoModel = provider === "gemini" &&
+    (modelId.startsWith("veo-") || modelId.startsWith("omni-"));
+
   useEffect(() => {
-    if (!modelId || provider === "gemini") {
+    if (!modelId || (provider === "gemini" && !isGeminiVideoModel)) {
       setSchema([]);
       onInputsLoaded?.([]);
       return;
@@ -150,7 +155,7 @@ function ModelParametersInner({
     };
 
     fetchSchema();
-  }, [modelId, provider, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, onInputsLoaded]);
+  }, [modelId, provider, isGeminiVideoModel, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, onInputsLoaded]);
 
   // Notify parent to resize node when schema loads
   useEffect(() => {

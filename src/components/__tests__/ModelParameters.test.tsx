@@ -73,6 +73,32 @@ describe("ModelParameters", () => {
       expect(container.firstChild).toBeNull();
     });
 
+    it("should fetch schema for Gemini video models (Veo/Omni)", async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            parameters: [createMockParameter({ name: "aspectRatio" })],
+            inputs: [],
+          }),
+      });
+
+      render(
+        <ModelParameters
+          {...defaultProps}
+          provider="gemini"
+          modelId="omni-flash/text-to-video"
+        />
+      );
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          expect.stringContaining("omni-flash%2Ftext-to-video"),
+          expect.anything()
+        );
+      });
+    });
+
     it("should not render when modelId is empty", () => {
       const { container } = render(
         <ModelParameters {...defaultProps} modelId="" />
