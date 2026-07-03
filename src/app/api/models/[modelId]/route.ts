@@ -952,6 +952,24 @@ function getGeminiVideoSchema(modelId: string): ExtractedSchema | null {
       { name: "image", type: "image", required: true, label: "Image" },
     ],
   };
+  schemas["omni-flash/reference-to-video"] = {
+    parameters: omniParams,
+    inputs: [
+      ...omniTextInputs,
+      // One array handle that accepts multiple reference image connections
+      { name: "reference_images", type: "image", required: true, label: "References", isArray: true },
+    ],
+  };
+  schemas["omni-flash/video-edit"] = {
+    // Output geometry follows the source video, so no aspect ratio param
+    parameters: [],
+    inputs: [
+      ...omniTextInputs,
+      // Video inputs use type "image" by convention (see kling motion-control,
+      // wan video-to-video) — canvas validation routes video sources onto them
+      { name: "video_url", type: "image", required: true, label: "Video" },
+    ],
+  };
 
   return schemas[modelId] ?? null;
 }

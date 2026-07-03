@@ -442,6 +442,24 @@ const GEMINI_VIDEO_MODELS: ProviderModel[] = [
     coverImage: undefined,
     pricing: { type: "per-second", amount: 0.10, currency: "USD" },
   },
+  {
+    id: "omni-flash/reference-to-video",
+    name: "Gemini Omni Flash Reference",
+    description: "Reference-to-video with Gemini Omni Flash. Connect multiple reference images (characters, objects, scenes) and the model keeps them consistent in the generated video.",
+    provider: "gemini",
+    capabilities: ["image-to-video"],
+    coverImage: undefined,
+    pricing: { type: "per-second", amount: 0.10, currency: "USD" },
+  },
+  {
+    id: "omni-flash/video-edit",
+    name: "Gemini Omni Flash Edit",
+    description: "Conversational video editing with Gemini Omni Flash. Connect a video and describe the change (e.g. 'make the mirror ripple'); the model regenerates the edited video.",
+    provider: "gemini",
+    capabilities: ["image-to-video"],
+    coverImage: undefined,
+    pricing: { type: "per-second", amount: 0.10, currency: "USD" },
+  },
 ];
 
 // WaveSpeed models are now fetched dynamically from https://api.wavespeed.ai/api/v3/models

@@ -472,3 +472,129 @@ describe("generateWithGeminiVideo (Omni models via Interactions API)", () => {
     expect(result.error).toContain("Quota exceeded");
   });
 });
+
+describe("generateWithGeminiVideo (Omni reference-to-video and edit)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    MockGoogleGenAI.reset();
+  });
+
+  it("should send all reference images plus task for reference-to-video", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: "v1_ref",
+          status: "completed",
+          output_video: { type: "video", mime_type: "video/mp4", data: "CCCC" },
+        }),
+    });
+
+    const result = await generateWithGeminiVideo(
+      "test-omni-ref-001",
+      "test-api-key",
+      "omni-flash/reference-to-video",
+      "A cat batting at a ball of yarn",
+      ["data:image/png;base64,CAT=", "data:image/jpeg;base64,YARN="],
+      { aspectRatio: "16:9" },
+    );
+
+    expect(result.success).toBe(true);
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.model).toBe("gemini-omni-flash-preview");
+    expect(body.input).toEqual([
+      { type: "image", data: "CAT=", mime_type: "image/png" },
+      { type: "image", data: "YARN=", mime_type: "image/jpeg" },
+      { type: "text", text: "A cat batting at a ball of yarn" },
+    ]);
+    expect(body.generation_config).toEqual({ video_config: { task: "reference_to_video" } });
+  });
+
+  it("should return error when reference-to-video has no images", async () => {
+    const result = await generateWithGeminiVideo(
+      "test-omni-ref-002",
+      "test-api-key",
+      "omni-flash/reference-to-video",
+      "test",
+      [],
+      {},
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("reference image");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("should upload the source video and send a document part for video-edit", async () => {
+    // fetch sequence: 1) upload start, 2) upload finalize, 3) interactions POST
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes("/upload/v1beta/files")) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: (h: string) => (h.toLowerCase() === "x-goog-upload-url" ? "https://upload.example/session-1" : null) },
+        });
+      }
+      if (url === "https://upload.example/session-1") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              file: { name: "files/vid123", uri: "https://generativelanguage.googleapis.com/v1beta/files/vid123", state: "ACTIVE" },
+            }),
+        });
+      }
+      if (url.includes("/interactions")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "v1_edit",
+              status: "completed",
+              output_video: { type: "video", mime_type: "video/mp4", data: "DDDD" },
+            }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+
+    const result = await generateWithGeminiVideo(
+      "test-omni-edit-001",
+      "test-api-key",
+      "omni-flash/video-edit",
+      "Make the mirror ripple",
+      [],
+      {},
+      { video_url: "data:video/mp4;base64,AAAA" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.outputs![0].data).toBe("data:video/mp4;base64,DDDD");
+
+    // Verify the interactions request carried the uploaded document + prompt
+    const interactionsCall = mockFetch.mock.calls.find(([url]) => String(url).includes("/interactions"));
+    const body = JSON.parse(interactionsCall![1].body);
+    expect(body.input).toEqual([
+      { type: "document", uri: "https://generativelanguage.googleapis.com/v1beta/files/vid123" },
+      { type: "text", text: "Make the mirror ripple" },
+    ]);
+    expect(body.generation_config).toEqual({ video_config: { task: "edit" } });
+    // Edit must not force an aspect ratio
+    expect(body.response_format).toEqual({ type: "video" });
+  });
+
+  it("should return error when video-edit has no connected video", async () => {
+    const result = await generateWithGeminiVideo(
+      "test-omni-edit-002",
+      "test-api-key",
+      "omni-flash/video-edit",
+      "Make it rain",
+      [],
+      {},
+      {},
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("source video");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});

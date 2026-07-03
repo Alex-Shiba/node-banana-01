@@ -208,6 +208,16 @@ const VEO_MODEL_MAP: Record<string, string> = {
 const OMNI_MODEL_MAP: Record<string, string> = {
   "omni-flash/text-to-video": "gemini-omni-flash-preview",
   "omni-flash/image-to-video": "gemini-omni-flash-preview",
+  "omni-flash/reference-to-video": "gemini-omni-flash-preview",
+  "omni-flash/video-edit": "gemini-omni-flash-preview",
+};
+
+/** Map internal Omni model IDs to the Interactions API video_config task */
+const OMNI_TASK_MAP: Record<string, string> = {
+  "omni-flash/text-to-video": "text_to_video",
+  "omni-flash/image-to-video": "image_to_video",
+  "omni-flash/reference-to-video": "reference_to_video",
+  "omni-flash/video-edit": "edit",
 };
 
 /** Returns true for any Gemini-native video model (Veo or Omni) */
@@ -228,10 +238,11 @@ export async function generateWithGeminiVideo(
   prompt: string,
   images: string[],
   parameters: Record<string, unknown> = {},
+  dynamicInputs?: Record<string, string | string[]>,
 ): Promise<GenerationOutput> {
   // Omni models use the Interactions API instead of the Veo operations flow
   if (OMNI_MODEL_MAP[modelId]) {
-    return generateWithGeminiOmniVideo(requestId, apiKey, modelId, prompt, images, parameters);
+    return generateWithGeminiOmniVideo(requestId, apiKey, modelId, prompt, images, parameters, dynamicInputs);
   }
 
   const apiModelId = VEO_MODEL_MAP[modelId];
@@ -473,10 +484,128 @@ async function downloadOmniVideoFromUri(
   };
 }
 
+/** Convert a base64 data URL (or raw base64) image to an Interactions API image part */
+function toOmniImagePart(image: string): { type: "image"; data: string; mime_type: string } {
+  let data = image;
+  let mimeType = "image/png";
+  if (image.includes("base64,")) {
+    const [header, base64Data] = image.split("base64,");
+    const mimeMatch = header.match(/data:([^;]+)/);
+    if (mimeMatch) mimeType = mimeMatch[1];
+    data = base64Data;
+  }
+  return { type: "image", data, mime_type: mimeType };
+}
+
+/**
+ * Upload a video to the Gemini Files API (resumable upload) and wait for it
+ * to become ACTIVE. Accepts a base64 data URL or an http(s) URL.
+ * Returns the file URI for use as a `document` part in the Interactions API.
+ */
+async function uploadOmniSourceVideo(
+  requestId: string,
+  apiKey: string,
+  video: string,
+): Promise<{ uri: string } | { error: string }> {
+  // Resolve the video to raw bytes + mime type
+  let videoBuffer: Buffer;
+  let mimeType = "video/mp4";
+
+  if (video.startsWith("data:")) {
+    const [header, base64Data] = video.split("base64,");
+    if (!base64Data) return { error: "Unsupported video data format" };
+    const mimeMatch = header.match(/data:([^;]+)/);
+    if (mimeMatch) mimeType = mimeMatch[1];
+    videoBuffer = Buffer.from(base64Data, "base64");
+  } else if (video.startsWith("http")) {
+    const fetchResponse = await fetch(video);
+    if (!fetchResponse.ok) {
+      return { error: `Failed to fetch source video: ${fetchResponse.status}` };
+    }
+    mimeType = fetchResponse.headers.get("content-type") || "video/mp4";
+    videoBuffer = Buffer.from(await fetchResponse.arrayBuffer());
+  } else {
+    return { error: "Unsupported video input format (expected data URL or http URL)" };
+  }
+
+  const sizeMB = (videoBuffer.byteLength / (1024 * 1024)).toFixed(2);
+  console.log(`[API:${requestId}] Uploading ${sizeMB}MB source video to Files API...`);
+
+  // Step 1: start resumable upload
+  const startResponse = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files`, {
+    method: "POST",
+    headers: {
+      "x-goog-api-key": apiKey,
+      "X-Goog-Upload-Protocol": "resumable",
+      "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Length": String(videoBuffer.byteLength),
+      "X-Goog-Upload-Header-Content-Type": mimeType,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ file: { display_name: `omni-edit-source-${requestId}` } }),
+  });
+  if (!startResponse.ok) {
+    return { error: `Failed to start video upload: ${startResponse.status}` };
+  }
+  const uploadUrl = startResponse.headers.get("x-goog-upload-url");
+  if (!uploadUrl) {
+    return { error: "Files API did not return an upload URL" };
+  }
+
+  // Step 2: upload bytes and finalize
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "Content-Length": String(videoBuffer.byteLength),
+      "X-Goog-Upload-Offset": "0",
+      "X-Goog-Upload-Command": "upload, finalize",
+    },
+    body: new Uint8Array(videoBuffer),
+  });
+  if (!uploadResponse.ok) {
+    return { error: `Failed to upload video: ${uploadResponse.status}` };
+  }
+  const uploadResult = await uploadResponse.json();
+  const file = uploadResult.file;
+  if (!file?.uri || !file?.name) {
+    return { error: "Files API upload returned no file URI" };
+  }
+
+  // Step 3: wait until the file is processed
+  const POLL_INTERVAL = 5_000;
+  const POLL_TIMEOUT = 90_000;
+  const pollStart = Date.now();
+  let state = typeof file.state === "string" ? file.state : file.state?.name;
+
+  while (state === "PROCESSING") {
+    if (Date.now() - pollStart > POLL_TIMEOUT) {
+      return { error: "Timed out waiting for uploaded video to be processed" };
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+    const metaResponse = await fetch(`${INTERACTIONS_API_BASE}/${file.name}`, {
+      headers: { "x-goog-api-key": apiKey },
+    });
+    if (!metaResponse.ok) {
+      return { error: `Failed to check uploaded video status: ${metaResponse.status}` };
+    }
+    const meta = await metaResponse.json();
+    state = typeof meta.state === "string" ? meta.state : meta.state?.name;
+  }
+
+  if (state === "FAILED") {
+    return { error: "Uploaded video failed processing" };
+  }
+
+  console.log(`[API:${requestId}] Source video uploaded: ${file.uri}`);
+  return { uri: file.uri };
+}
+
 /**
  * Generate video using the Gemini Interactions API (Omni models).
  * Unlike Veo, this is a synchronous unary request — the response contains
  * the video inline (base64) or as a Files API URI.
+ * Supports four tasks: text_to_video, image_to_video, reference_to_video
+ * (multiple reference images), and edit (regenerate a connected video).
  */
 async function generateWithGeminiOmniVideo(
   requestId: string,
@@ -485,36 +614,49 @@ async function generateWithGeminiOmniVideo(
   prompt: string,
   images: string[],
   parameters: Record<string, unknown> = {},
+  dynamicInputs?: Record<string, string | string[]>,
 ): Promise<GenerationOutput> {
   const apiModelId = OMNI_MODEL_MAP[modelId];
+  const task = OMNI_TASK_MAP[modelId];
 
-  console.log(`[API:${requestId}] Gemini Omni video generation - Model: ${apiModelId}, Prompt: ${prompt?.length || 0} chars, Images: ${images?.length || 0}`);
+  console.log(`[API:${requestId}] Gemini Omni video generation - Model: ${apiModelId}, Task: ${task}, Prompt: ${prompt?.length || 0} chars, Images: ${images?.length || 0}`);
 
-  if (modelId.includes("image-to-video") && (!images || images.length === 0)) {
-    console.error(`[API:${requestId}] Image required for image-to-video model: ${modelId}`);
-    return { success: false, error: "Image required for image-to-video model" };
-  }
-
-  // Build the input: plain prompt for T2V, image + text parts for I2V
+  // Build the input parts per task
   let input: unknown = prompt;
-  if (images && images.length > 0 && modelId.includes("image-to-video")) {
-    const imageInput = images[0];
-    let data = imageInput;
-    let mimeType = "image/png";
-    if (imageInput.includes("base64,")) {
-      const [header, base64Data] = imageInput.split("base64,");
-      const mimeMatch = header.match(/data:([^;]+)/);
-      if (mimeMatch) mimeType = mimeMatch[1];
-      data = base64Data;
+
+  if (task === "image_to_video") {
+    if (!images || images.length === 0) {
+      console.error(`[API:${requestId}] Image required for image-to-video model: ${modelId}`);
+      return { success: false, error: "Image required for image-to-video model" };
+    }
+    input = [toOmniImagePart(images[0]), { type: "text", text: prompt }];
+  } else if (task === "reference_to_video") {
+    if (!images || images.length === 0) {
+      console.error(`[API:${requestId}] Reference images required for model: ${modelId}`);
+      return { success: false, error: "Connect at least one reference image" };
+    }
+    input = [...images.map(toOmniImagePart), { type: "text", text: prompt }];
+  } else if (task === "edit") {
+    const rawVideo = dynamicInputs?.video_url;
+    const sourceVideo = Array.isArray(rawVideo) ? rawVideo[0] : rawVideo;
+    if (!sourceVideo) {
+      console.error(`[API:${requestId}] Source video required for edit model: ${modelId}`);
+      return { success: false, error: "Connect a source video to edit" };
+    }
+    const uploaded = await uploadOmniSourceVideo(requestId, apiKey, sourceVideo);
+    if ("error" in uploaded) {
+      console.error(`[API:${requestId}] ${uploaded.error}`);
+      return { success: false, error: uploaded.error };
     }
     input = [
-      { type: "image", data, mime_type: mimeType },
+      { type: "document", uri: uploaded.uri },
       { type: "text", text: prompt },
     ];
   }
 
   const responseFormat: Record<string, unknown> = { type: "video" };
-  if (parameters.aspectRatio) {
+  // Edit output follows the source video geometry — no aspect ratio override
+  if (parameters.aspectRatio && task !== "edit") {
     responseFormat.aspect_ratio = parameters.aspectRatio;
   }
 
@@ -522,6 +664,9 @@ async function generateWithGeminiOmniVideo(
     model: apiModelId,
     input,
     response_format: responseFormat,
+    generation_config: {
+      video_config: { task },
+    },
   };
 
   // Synchronous unary call — budget most of the route's 5min for the POST,

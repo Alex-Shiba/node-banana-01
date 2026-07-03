@@ -495,6 +495,7 @@ export async function POST(request: NextRequest) {
         resolvedPrompt || "",
         images || [],
         veoParams,
+        dynamicInputs,
       );
 
       if (!result.success) {
