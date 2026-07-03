@@ -933,6 +933,26 @@ function getGeminiVideoSchema(modelId: string): ExtractedSchema | null {
     },
   };
 
+  // Omni models (Interactions API): only aspect ratio is configurable;
+  // negative prompts, seed, duration, and resolution are not supported
+  const omniParams: ModelParameter[] = [
+    { name: "aspectRatio", type: "string", description: "Output aspect ratio", enum: ["16:9", "9:16"], default: "16:9" },
+  ];
+  const omniTextInputs: ModelInput[] = [
+    { name: "prompt", type: "text", required: true, label: "Prompt" },
+  ];
+  schemas["omni-flash/text-to-video"] = {
+    parameters: omniParams,
+    inputs: omniTextInputs,
+  };
+  schemas["omni-flash/image-to-video"] = {
+    parameters: omniParams,
+    inputs: [
+      ...omniTextInputs,
+      { name: "image", type: "image", required: true, label: "Image" },
+    ],
+  };
+
   return schemas[modelId] ?? null;
 }
 

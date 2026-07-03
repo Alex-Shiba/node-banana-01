@@ -310,3 +310,165 @@ describe("generateWithGeminiVideo", () => {
     );
   });
 });
+
+describe("generateWithGeminiVideo (Omni models via Interactions API)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    MockGoogleGenAI.reset();
+  });
+
+  it("should generate text-to-video via the interactions endpoint", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: "v1_abc",
+          status: "completed",
+          model: "gemini-omni-flash-preview",
+          output_video: { type: "video", mime_type: "video/mp4", data: "AAAB" },
+        }),
+    });
+
+    const result = await generateWithGeminiVideo(
+      "test-omni-001",
+      "test-api-key",
+      "omni-flash/text-to-video",
+      "A cat playing piano",
+      [],
+      { aspectRatio: "9:16" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.outputs![0].type).toBe("video");
+    expect(result.outputs![0].data).toBe("data:video/mp4;base64,AAAB");
+
+    // Veo SDK path must not be used
+    expect(mockGenerateVideos).not.toHaveBeenCalled();
+
+    // Verify the interactions endpoint and request body
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/interactions");
+    expect(init.method).toBe("POST");
+    expect(init.headers["x-goog-api-key"]).toBe("test-api-key");
+    const body = JSON.parse(init.body);
+    expect(body.model).toBe("gemini-omni-flash-preview");
+    expect(body.input).toBe("A cat playing piano");
+    expect(body.response_format).toEqual({ type: "video", aspect_ratio: "9:16" });
+  });
+
+  it("should send image + text parts for image-to-video", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: "v1_def",
+          status: "completed",
+          output_video: { type: "video", mime_type: "video/mp4", data: "AAAB" },
+        }),
+    });
+
+    const result = await generateWithGeminiVideo(
+      "test-omni-002",
+      "test-api-key",
+      "omni-flash/image-to-video",
+      "Animate this image",
+      ["data:image/jpeg;base64,iVBORw0KGgo="],
+      {},
+    );
+
+    expect(result.success).toBe(true);
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.input).toEqual([
+      { type: "image", data: "iVBORw0KGgo=", mime_type: "image/jpeg" },
+      { type: "text", text: "Animate this image" },
+    ]);
+  });
+
+  it("should return error when image-to-video has no image", async () => {
+    const result = await generateWithGeminiVideo(
+      "test-omni-003",
+      "test-api-key",
+      "omni-flash/image-to-video",
+      "Animate",
+      [],
+      {},
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Image required");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("should extract video from steps content when output_video is absent", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: "v1_ghi",
+          status: "completed",
+          steps: [
+            {
+              type: "model_output",
+              content: [
+                { type: "text", text: "Here is your video" },
+                { type: "video", mime_type: "video/mp4", data: "BBBB" },
+              ],
+            },
+          ],
+        }),
+    });
+
+    const result = await generateWithGeminiVideo(
+      "test-omni-004",
+      "test-api-key",
+      "omni-flash/text-to-video",
+      "test",
+      [],
+      {},
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.outputs![0].data).toBe("data:video/mp4;base64,BBBB");
+  });
+
+  it("should return error when response has no video", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({ id: "v1_jkl", status: "completed", steps: [] }),
+    });
+
+    const result = await generateWithGeminiVideo(
+      "test-omni-005",
+      "test-api-key",
+      "omni-flash/text-to-video",
+      "test",
+      [],
+      {},
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("No video generated");
+  });
+
+  it("should surface API error messages", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: () =>
+        Promise.resolve(JSON.stringify({ error: { message: "Quota exceeded" } })),
+    });
+
+    const result = await generateWithGeminiVideo(
+      "test-omni-006",
+      "test-api-key",
+      "omni-flash/text-to-video",
+      "test",
+      [],
+      {},
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Quota exceeded");
+  });
+});

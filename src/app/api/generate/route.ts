@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GenerateRequest, GenerateResponse, ModelType, SelectedModel, ProviderType } from "@/types";
 import { GenerationInput, ModelCapability } from "@/lib/providers/types";
-import { generateWithGemini, generateWithGeminiVideo } from "./providers/gemini";
+import { generateWithGemini, generateWithGeminiVideo, isGeminiVideoModel } from "./providers/gemini";
 import { generateWithReplicate } from "./providers/replicate";
 import { clearFalInputMappingCache as _clearFalInputMappingCache, generateWithFalQueue } from "./providers/fal";
 import { generateWithKie } from "./providers/kie";
@@ -479,8 +479,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if this is a Veo video model request
-    if (selectedModel?.modelId?.startsWith("veo-")) {
+    // Check if this is a Gemini-native video model request (Veo or Omni)
+    if (selectedModel?.modelId && isGeminiVideoModel(selectedModel.modelId)) {
       // Merge negative prompt from dynamic inputs (connected handle) into parameters
       const veoParams = { ...(parameters || {}) };
       if (dynamicInputs?.negative_prompt) {
