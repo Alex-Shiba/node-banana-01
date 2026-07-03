@@ -1242,7 +1242,7 @@ export async function GET(
       result = getKieSchema(decodedModelId);
     } else if (provider === "wavespeed") {
       // WaveSpeed uses dynamic schemas from API, with static fallback
-      const apiKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY || null;
+      const apiKey = (request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY)?.trim() || null;
       result = await fetchWaveSpeedSchema(decodedModelId, apiKey);
     } else {
       // User-provided key takes precedence over env variable

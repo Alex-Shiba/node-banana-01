@@ -824,13 +824,23 @@ function mapWaveSpeedModel(model: WaveSpeedModel): ProviderModel {
 async function fetchWaveSpeedModels(apiKey: string): Promise<ProviderModel[]> {
   const response = await fetch(`${WAVESPEED_API_BASE}/models`, {
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey.trim()}`,
       "Content-Type": "application/json",
     },
   });
 
   if (!response.ok) {
-    throw new Error(`WaveSpeed API error: ${response.status}`);
+    let detail = "";
+    try {
+      const errBody = await response.json();
+      if (errBody?.message) detail = ` - ${errBody.message}`;
+    } catch {
+      // ignore unparseable error body
+    }
+    const hint = response.status === 401
+      ? ". The key was sent but WaveSpeed rejected it — check that WAVESPEED_API_KEY is a valid key from wavespeed.ai dashboard"
+      : "";
+    throw new Error(`WaveSpeed API error: ${response.status}${detail}${hint}`);
   }
 
   const data: WaveSpeedModelsResponse = await response.json();
@@ -970,7 +980,7 @@ export async function GET(
   const replicateKey = request.headers.get("X-Replicate-Key") || process.env.REPLICATE_API_KEY || null;
   const falKey = request.headers.get("X-Fal-Key") || process.env.FAL_API_KEY || null;
   const kieKey = request.headers.get("X-Kie-Key") || process.env.KIE_API_KEY || null;
-  const wavespeedKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY || null;
+  const wavespeedKey = (request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY)?.trim() || null;
 
   // Build list of all available providers (have keys from env or client headers)
   const availableProviders: string[] = ["gemini"]; // Gemini always available

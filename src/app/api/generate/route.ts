@@ -374,7 +374,7 @@ export async function POST(request: NextRequest) {
       }
 
       // User-provided key takes precedence over env variable
-      const wavespeedApiKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY;
+      const wavespeedApiKey = (request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY)?.trim();
       if (!wavespeedApiKey) {
         return NextResponse.json<GenerateResponse>(
           {
