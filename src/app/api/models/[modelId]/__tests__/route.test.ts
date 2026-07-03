@@ -842,4 +842,25 @@ describe("/api/models/[modelId] schema endpoint", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("wavespeed provider", () => {
+    it("GET: should inject enable_safety_checker even when the published schema omits it", async () => {
+      delete process.env.WAVESPEED_API_KEY;
+      const modelId = `google/gemini-omni-flash/reference-to-video-${testCounter++}`;
+
+      // No API key -> static fallback schema, which has no safety param
+      const request = createMockSchemaRequest(modelId, "wavespeed");
+      const response = await GET(request, { params: Promise.resolve({ modelId }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      const safetyParam = data.parameters.find(
+        (p: { name: string }) => p.name === "enable_safety_checker"
+      );
+      expect(safetyParam).toBeDefined();
+      expect(safetyParam.type).toBe("boolean");
+      expect(safetyParam.default).toBe(true);
+    });
+  });
 });

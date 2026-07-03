@@ -7,8 +7,8 @@ import { useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
 
 // localStorage cache for model schemas (persists across dev server restarts)
-// v2: safety-checker params un-excluded, Gemini video schemas added
-const SCHEMA_CACHE_KEY = "node-banana-schema-cache-v2";
+// v3: enable_safety_checker injected into WaveSpeed schemas
+const SCHEMA_CACHE_KEY = "node-banana-schema-cache-v3";
 const SCHEMA_CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours
 
 interface SchemaCacheEntry {

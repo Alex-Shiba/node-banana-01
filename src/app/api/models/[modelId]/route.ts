@@ -1113,6 +1113,30 @@ const WAVESPEED_API_BASE = "https://api.wavespeed.ai/api/v3";
  * Fetch WaveSpeed schema dynamically from cache or API
  * Falls back to static schema if dynamic schema not available
  */
+/**
+ * Add WaveSpeed platform-wide parameters that the API accepts but the
+ * published api_schema omits. The safety checker is enabled by default
+ * server-side and can only be disabled through the API (their playground
+ * tooltip: "This property is only available through the API").
+ */
+function injectWaveSpeedPlatformParams(schema: ExtractedSchema): ExtractedSchema {
+  if (schema.parameters.some((p) => p.name === "enable_safety_checker")) {
+    return schema;
+  }
+  return {
+    ...schema,
+    parameters: [
+      ...schema.parameters,
+      {
+        name: "enable_safety_checker",
+        type: "boolean",
+        description: "Content safety filter (WaveSpeed default: on). Untick if safe prompts get rejected.",
+        default: true,
+      },
+    ],
+  };
+}
+
 async function fetchWaveSpeedSchema(
   modelId: string,
   apiKey: string | null
@@ -1261,7 +1285,7 @@ export async function GET(
     } else if (provider === "wavespeed") {
       // WaveSpeed uses dynamic schemas from API, with static fallback
       const apiKey = (request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY)?.trim() || null;
-      result = await fetchWaveSpeedSchema(decodedModelId, apiKey);
+      result = injectWaveSpeedPlatformParams(await fetchWaveSpeedSchema(decodedModelId, apiKey));
     } else {
       // User-provided key takes precedence over env variable
       const apiKey = request.headers.get("X-Fal-Key") || process.env.FAL_API_KEY || null;
