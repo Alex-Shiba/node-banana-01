@@ -47,7 +47,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   // Use stable selector for API keys to prevent unnecessary re-fetches
-  const { geminiApiKey, replicateApiKey, falApiKey, kieApiKey, replicateEnabled, kieEnabled } = useProviderApiKeys();
+  const { geminiApiKey, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, replicateEnabled, kieEnabled } = useProviderApiKeys();
   const generationsPath = useWorkflowStore((state) => state.generationsPath);
   const [externalModels, setExternalModels] = useState<ProviderModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
@@ -85,8 +85,12 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
     if (kieEnabled && kieApiKey) {
       providers.push({ id: "kie", name: "Kie.ai" });
     }
+    // Add WaveSpeed if configured
+    if (wavespeedApiKey) {
+      providers.push({ id: "wavespeed", name: "WaveSpeed" });
+    }
     return providers;
-  }, [geminiApiKey, replicateEnabled, replicateApiKey, kieEnabled, kieApiKey]);
+  }, [geminiApiKey, replicateEnabled, replicateApiKey, kieEnabled, kieApiKey, wavespeedApiKey]);
 
   // Fetch models from external providers when provider changes
   const fetchModels = useCallback(async () => {
@@ -106,6 +110,9 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       }
       if (kieApiKey) {
         headers["X-Kie-Key"] = kieApiKey;
+      }
+      if (wavespeedApiKey) {
+        headers["X-WaveSpeed-Key"] = wavespeedApiKey;
       }
       const response = await deduplicatedFetch(`/api/models?provider=${currentProvider}&capabilities=${capabilities}`, { headers });
       if (response.ok) {
@@ -129,7 +136,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
     } finally {
       setIsLoadingModels(false);
     }
-  }, [currentProvider, geminiApiKey, replicateApiKey, falApiKey, kieApiKey]);
+  }, [currentProvider, geminiApiKey, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey]);
 
   useEffect(() => {
     fetchModels();
