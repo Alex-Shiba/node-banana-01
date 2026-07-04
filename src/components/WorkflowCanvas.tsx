@@ -35,6 +35,7 @@ import {
   GenerateAudioNode,
   LLMGenerateNode,
   SplitGridNode,
+  ImageCollageNode,
   OutputNode,
   OutputGalleryNode,
   ImageCompareNode,
@@ -88,6 +89,7 @@ const nodeTypes: NodeTypes = {
   generateAudio: GenerateAudioNode,
   llmGenerate: LLMGenerateNode,
   splitGrid: SplitGridNode,
+  imageCollage: ImageCollageNode,
   output: OutputNode,
   outputGallery: OutputGalleryNode,
   imageCompare: ImageCompareNode,
@@ -159,6 +161,8 @@ const getNodeHandles = (nodeType: string): { inputs: string[]; outputs: string[]
       return { inputs: ["text", "image"], outputs: ["text"] };
     case "splitGrid":
       return { inputs: ["image"], outputs: ["reference"] };
+    case "imageCollage":
+      return { inputs: ["image"], outputs: ["image"] };
     case "output":
       return { inputs: ["image", "video", "audio"], outputs: [] };
     case "outputGallery":
@@ -372,6 +376,7 @@ export function WorkflowCanvas() {
     generateAudio: 'Generate Audio',
     llmGenerate: 'LLM Generate',
     splitGrid: 'Split Grid',
+    imageCollage: 'Image Collage',
     output: 'Output',
     outputGallery: 'Output Gallery',
     imageCompare: 'Image Compare',
@@ -1137,7 +1142,7 @@ export function WorkflowCanvas() {
           sourceHandleIdForNewNode = "default";
         }
       } else if (handleType === "image") {
-        if (nodeType === "annotation" || nodeType === "output" || nodeType === "splitGrid" || nodeType === "outputGallery" || nodeType === "imageCompare") {
+        if (nodeType === "annotation" || nodeType === "output" || nodeType === "splitGrid" || nodeType === "imageCollage" || nodeType === "outputGallery" || nodeType === "imageCompare") {
           targetHandleId = "image";
           // annotation also has an image output
           if (nodeType === "annotation") {
@@ -1464,6 +1469,7 @@ export function WorkflowCanvas() {
             generateAudio: { width: 300, height: 280 },
             llmGenerate: { width: 320, height: 360 },
             splitGrid: { width: 300, height: 320 },
+            imageCollage: { width: 300, height: 320 },
             output: { width: 320, height: 320 },
             outputGallery: { width: 320, height: 360 },
             imageCompare: { width: 400, height: 360 },
@@ -2061,6 +2067,8 @@ export function WorkflowCanvas() {
                 return "#06b6d4";
               case "splitGrid":
                 return "#f59e0b";
+              case "imageCollage":
+                return "#d97706";
               case "output":
                 return "#ef4444";
               case "outputGallery":

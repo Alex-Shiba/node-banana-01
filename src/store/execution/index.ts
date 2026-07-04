@@ -38,6 +38,7 @@ export { executeLlmGenerate } from "./llmGenerateExecutor";
 export type { LlmGenerateOptions } from "./llmGenerateExecutor";
 
 export { executeSplitGrid } from "./splitGridExecutor";
+export { executeImageCollage } from "./imageCollageExecutor";
 
 export {
   executeVideoStitch,

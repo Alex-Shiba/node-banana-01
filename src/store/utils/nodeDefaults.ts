@@ -13,6 +13,7 @@ import {
   GenerateAudioNodeData,
   LLMGenerateNodeData,
   SplitGridNodeData,
+  ImageCollageNodeData,
   OutputNodeData,
   OutputGalleryNodeData,
   ImageCompareNodeData,
@@ -48,6 +49,7 @@ export const defaultNodeDimensions: Record<NodeType, { width: number; height: nu
   generateAudio: { width: 300, height: 280 },
   llmGenerate: { width: 320, height: 360 },
   splitGrid: { width: 300, height: 320 },
+  imageCollage: { width: 300, height: 320 },
   output: { width: 320, height: 320 },
   outputGallery: { width: 320, height: 360 },
   imageCompare: { width: 400, height: 360 },
@@ -242,6 +244,14 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         status: "idle",
         error: null,
       } as SplitGridNodeData;
+    case "imageCollage":
+      return {
+        inputImages: [],
+        outputImage: null,
+        columns: null,
+        status: "idle",
+        error: null,
+      } as ImageCollageNodeData;
     case "output":
       return {
         image: null,

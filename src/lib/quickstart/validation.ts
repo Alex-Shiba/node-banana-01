@@ -24,6 +24,7 @@ const VALID_NODE_TYPES: NodeType[] = [
   "generateAudio",
   "llmGenerate",
   "splitGrid",
+  "imageCollage",
   "output",
   "outputGallery",
   "imageCompare",
@@ -54,6 +55,7 @@ const DEFAULT_DIMENSIONS: Record<NodeType, { width: number; height: number }> = 
   generateAudio: { width: 300, height: 280 },
   llmGenerate: { width: 320, height: 360 },
   splitGrid: { width: 300, height: 320 },
+  imageCollage: { width: 300, height: 320 },
   output: { width: 320, height: 320 },
   outputGallery: { width: 320, height: 360 },
   imageCompare: { width: 400, height: 360 },
@@ -340,6 +342,14 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         gridRows: 2,
         gridCols: 3,
         isConfigured: false,
+        status: "idle",
+        error: null,
+      };
+    case "imageCollage":
+      return {
+        inputImages: [],
+        outputImage: null,
+        columns: null,
         status: "idle",
         error: null,
       };

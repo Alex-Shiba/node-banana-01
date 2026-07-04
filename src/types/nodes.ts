@@ -34,6 +34,7 @@ export type NodeType =
   | "generateAudio"
   | "llmGenerate"
   | "splitGrid"
+  | "imageCollage"
   | "output"
   | "outputGallery"
   | "imageCompare"
@@ -441,6 +442,20 @@ export interface SplitGridNodeData extends BaseNodeData {
 }
 
 /**
+ * Image Collage node - combines multiple images into a single grid image
+ * (inverse of splitGrid). Useful for packing multi-angle references into
+ * one image / one prompt-constructor variable.
+ */
+export interface ImageCollageNodeData extends BaseNodeData {
+  inputImages: string[];
+  outputImage: string | null;
+  outputImageRef?: string; // External image reference for storage optimization
+  columns: number | null; // null = auto (square-ish grid)
+  status: NodeStatus;
+  error: string | null;
+}
+
+/**
  * GLB 3D Viewer node - loads and displays 3D models, captures viewport as image
  */
 export interface GLBViewerNodeData extends BaseNodeData {
@@ -486,6 +501,7 @@ export type WorkflowNodeData =
   | GenerateAudioNodeData
   | LLMGenerateNodeData
   | SplitGridNodeData
+  | ImageCollageNodeData
   | OutputNodeData
   | OutputGalleryNodeData
   | ImageCompareNodeData

@@ -27,6 +27,7 @@ import {
   SwitchNodeData,
   ConditionalSwitchNodeData,
   InpaintNodeData,
+  ImageCollageNodeData,
   MatchMode,
 } from "@/types";
 
@@ -119,6 +120,8 @@ function getSourceOutput(
     return { type: "image", value: (sourceNode.data as GLBViewerNodeData).capturedImage };
   } else if (sourceNode.type === "inpaint") {
     return { type: "image", value: (sourceNode.data as InpaintNodeData).outputImage };
+  } else if (sourceNode.type === "imageCollage") {
+    return { type: "image", value: (sourceNode.data as ImageCollageNodeData).outputImage };
   }
   return { type: "image", value: null };
 }

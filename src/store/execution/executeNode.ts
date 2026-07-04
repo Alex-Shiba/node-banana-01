@@ -22,6 +22,7 @@ import { executeGenerateVideo } from "./generateVideoExecutor";
 import { executeGenerate3D } from "./generate3dExecutor";
 import { executeLlmGenerate } from "./llmGenerateExecutor";
 import { executeSplitGrid } from "./splitGridExecutor";
+import { executeImageCollage } from "./imageCollageExecutor";
 import { executeVideoStitch, executeEaseCurve, executeVideoTrim, executeVideoFrameGrab } from "./videoProcessingExecutors";
 import { executeGenerateAudio } from "./generateAudioExecutor";
 import { executeInpaint } from "./inpaintExecutor";
@@ -80,6 +81,9 @@ export async function executeNode(
       break;
     case "splitGrid":
       await executeSplitGrid(ctx);
+      break;
+    case "imageCollage":
+      await executeImageCollage(ctx);
       break;
     case "output":
       await executeOutput(ctx);

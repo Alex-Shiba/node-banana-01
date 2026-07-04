@@ -10,6 +10,7 @@ export { Generate3DNode } from "./Generate3DNode";
 export { GenerateAudioNode } from "./GenerateAudioNode";
 export { LLMGenerateNode } from "./LLMGenerateNode";
 export { SplitGridNode } from "./SplitGridNode";
+export { ImageCollageNode } from "./ImageCollageNode";
 export { OutputNode } from "./OutputNode";
 export { OutputGalleryNode } from "./OutputGalleryNode";
 export { ImageCompareNode } from "./ImageCompareNode";

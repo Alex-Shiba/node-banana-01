@@ -40,6 +40,7 @@ const ALL_NODES_CATEGORIES: { label: string; nodes: { type: NodeType; label: str
     nodes: [
       { type: "annotation", label: "Annotate" },
       { type: "splitGrid", label: "Split Grid" },
+      { type: "imageCollage", label: "Image Collage" },
       { type: "videoStitch", label: "Video Stitch" },
       { type: "videoTrim", label: "Video Trim" },
       { type: "easeCurve", label: "Ease Curve" },
